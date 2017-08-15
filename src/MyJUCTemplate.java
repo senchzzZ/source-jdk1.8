@@ -9,6 +9,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 
 /**
  * Created by zhaoshengqi on 2017/7/24.
@@ -1408,5 +1410,208 @@ public class MyJUCTemplate {
     Object[] toArray()
     // 返回一个包含此 set 所有元素的数组；返回数组的运行时类型是指定数组的类型。
     <T> T[] toArray(T[] a);
+
+    /*******************************ConcurrentHashMap***********************************/
+    // 创建一个带有默认初始容量 (16)、加载因子 (0.75) 和 concurrencyLevel (16) 的新的空映射。
+    ConcurrentHashMap()
+    // 创建一个带有指定初始容量、默认加载因子 (0.75) 和 concurrencyLevel (16) 的新的空映射。
+    ConcurrentHashMap(int initialCapacity)
+    // 创建一个带有指定初始容量、加载因子和默认 concurrencyLevel (16) 的新的空映射。
+    ConcurrentHashMap(int initialCapacity, float loadFactor)
+    // 创建一个带有指定初始容量、加载因子和并发级别的新的空映射。
+    ConcurrentHashMap(int initialCapacity, float loadFactor, int concurrencyLevel)
+    // 构造一个与给定映射具有相同映射关系的新映射。
+    ConcurrentHashMap(Map<? extends K,? extends V> m)
+
+    // 从该映射中移除所有映射关系
+    void clear()
+    // 一种遗留方法，测试此表中是否有一些与指定值存在映射关系的键。
+    boolean contains(Object value)
+    // 测试指定对象是否为此表中的键。
+    boolean containsKey(Object key)
+    // 如果此映射将一个或多个键映射到指定值，则返回 true。
+    boolean containsValue(Object value)
+    // 返回此表中值的枚举。
+    Enumeration<V> elements()
+    // 返回此映射所包含的映射关系的 Set 视图。
+    Set<Map.Entry<K,V>> entrySet()
+    // 返回指定键所映射到的值，如果此映射不包含该键的映射关系，则返回 null。
+    V get(Object key)
+    // 如果此映射不包含键-值映射关系，则返回 true。
+    boolean isEmpty()
+    // 返回此表中键的枚举。
+    Enumeration<K> keys()
+    // 返回此映射中包含的键的 Set 视图。
+    Set<K> keySet()
+    // 将指定键映射到此表中的指定值。
+    V put(K key, V value)
+    // 将指定映射中所有映射关系复制到此映射中。
+    void putAll(Map<? extends K,? extends V> m)
+    // 如果指定键已经不再与某个值相关联，则将它与给定值关联。
+    V putIfAbsent(K key, V value)
+    // 从此映射中移除键（及其相应的值）。
+    V remove(Object key)
+    // 只有目前将键的条目映射到给定值时，才移除该键的条目。
+    boolean remove(Object key, Object value)
+    // 只有目前将键的条目映射到某一值时，才替换该键的条目。
+    V replace(K key, V value)
+    // 只有目前将键的条目映射到给定值时，才替换该键的条目。
+    boolean replace(K key, V oldValue, V newValue)
+    // 返回此映射中的键-值映射关系数。
+    int size()
+    // 返回此映射中包含的值的 Collection 视图。
+    Collection<V> values();
+
+    /**存放Node元素的数组,在第一次插入数据时初始化*/
+    transient volatile Node<K,V>[] table;
+
+    /**
+     * The next table to use; non-null only while resizing.
+     */
+    /**一个过渡的table表  只有在扩容的时候才会使用 */
+    private transient volatile Node<K,V>[] nextTable;
+
+    /**
+     * Base counter value, used mainly when there is no contention,
+     * but also as a fallback during table initialization
+     * races. Updated via CAS.
+     */
+    private transient volatile long baseCount;
+
+    /**
+     * Table initialization and resizing control.  When negative, the
+     * table is being initialized or resized: -1 for initialization,
+     * else -(1 + the number of active resizing threads).  Otherwise,
+     * when table is null, holds the initial table size to use upon
+     * creation, or 0 for default. After initialization, holds the
+     * next element count value upon which to resize the table.
+     * 用来标识table的初始化和扩容操作
+     负数代表正在进行初始化或扩容操作
+     -1代表正在初始化
+     -N 表示有N-1个线程正在进行扩容操作
+     正数或0代表table还没有被初始化，这个数值表示初始化或下一次进行扩容的大小
+     如果获得了初始化权限，就用CAS方法将sizeCtl置为-1，防止其他线程进入。
+     初始化数组后，将sizeCtl的值改为0.75*n（n - (n >>> 2)）
+     */
+    private transient volatile int sizeCtl;
+
+    /**
+     * The next table index (plus one) to split while resizing.
+     *
+     * 初值为最后一个桶，表示从transferIndex开始到后面所有的桶的迁移任务已经被分配出去了。
+     * 所以每次线程领取扩容任务，则需要对该属性进行CAS的减操作，即一般是transferIndex-stride。
+     */
+    private transient volatile int transferIndex;
+
+    /*********************以下为1.8新增方法*******************************/
+
+    /**对于指定key做remappingFunction函数调用，remappingFunction函数返回值即为新的value，
+    如果返回值为null，则从map中删除对应的key。compute返回key更新后的值（remappingFunction函数返回值）*/
+    public V compute(K key, BiFunction<? super K, ? super V, ? extends V> remappingFunction);
+
+    /**如果指定的key不存在，对该key做mappingFunction函数操作，mappingFunction函数返回值不为null，则将对应的k-v放到map中，否则不操作。
+    如果key存在返回key对应的value（此时mappingFunction不会调用）*/
+    public V computeIfAbsent(K key, Function<? super K, ? extends V> mappingFunction);
+    /**类似与computeIfAbsent，仅对已经存在的key才计算新value。同样，如果remappingFunction返回值为null，会删除对应的k-v。*/
+    public V computeIfPresent(K key, BiFunction<? super K, ? super V, ? extends V> remappingFunction);
+    /**当key不存在，直接插入对应value，remappingFunction不会被调用；否则，对oldValue与value做remappingFunction函数，结果作为新的newValue插入到map中。
+     同样null结果会删除对应的k-v。*/
+    public V merge(K key, V value, BiFunction<? super V, ? super V, ? extends V> remappingFunction);
+
+    public <U> U search(long parallelismThreshold, BiFunction<? super K, ? super V, ? extends U> searchFunction);
+
+
+    /**************************ConcurrentSkipListMap****************************************/
+    // 构造一个新的空映射，该映射按照键的自然顺序进行排序。
+    ConcurrentSkipListMap()
+    // 构造一个新的空映射，该映射按照指定的比较器进行排序。
+    ConcurrentSkipListMap(Comparator<? super K> comparator)
+    // 构造一个新映射，该映射所包含的映射关系与给定映射包含的映射关系相同，并按照键的自然顺序进行排序。
+    ConcurrentSkipListMap(Map<? extends K,? extends V> m)
+    // 构造一个新映射，该映射所包含的映射关系与指定的有序映射包含的映射关系相同，使用的顺序也相同。
+    ConcurrentSkipListMap(SortedMap<K,? extends V> m)
+
+    // 返回与大于等于给定键的最小键关联的键-值映射关系；如果不存在这样的条目，则返回 null。
+    Map.Entry<K,V> ceilingEntry(K key)
+    // 返回大于等于给定键的最小键；如果不存在这样的键，则返回 null。
+    K ceilingKey(K key)
+    // 从此映射中移除所有映射关系。
+    void clear()
+    // 返回此 ConcurrentSkipListMap 实例的浅表副本。
+    ConcurrentSkipListMap<K,V> clone()
+    // 返回对此映射中的键进行排序的比较器；如果此映射使用键的自然顺序，则返回 null。
+    Comparator<? super K> comparator()
+    // 如果此映射包含指定键的映射关系，则返回 true。
+    boolean containsKey(Object key)
+    // 如果此映射为指定值映射一个或多个键，则返回 true。
+    boolean containsValue(Object value)
+    // 返回此映射中所包含键的逆序 NavigableSet 视图。
+    NavigableSet<K> descendingKeySet()
+    // 返回此映射中所包含映射关系的逆序视图。
+    ConcurrentNavigableMap<K,V> descendingMap()
+    // 返回此映射中所包含的映射关系的 Set 视图。
+    Set<Map.Entry<K,V>> entrySet()
+    // 比较指定对象与此映射的相等性。
+    boolean equals(Object o)
+    // 返回与此映射中的最小键关联的键-值映射关系；如果该映射为空，则返回 null。
+    Map.Entry<K,V> firstEntry()
+    // 返回此映射中当前第一个（最低）键。
+    K firstKey()
+    // 返回与小于等于给定键的最大键关联的键-值映射关系；如果不存在这样的键，则返回 null。
+    Map.Entry<K,V> floorEntry(K key)
+    // 返回小于等于给定键的最大键；如果不存在这样的键，则返回 null。
+    K floorKey(K key)
+    // 返回指定键所映射到的值；如果此映射不包含该键的映射关系，则返回 null。
+    V get(Object key)
+    // 返回此映射的部分视图，其键值严格小于 toKey。
+    ConcurrentNavigableMap<K,V> headMap(K toKey)
+    // 返回此映射的部分视图，其键小于（或等于，如果 inclusive 为 true）toKey。
+    ConcurrentNavigableMap<K,V> headMap(K toKey, boolean inclusive)
+    // 返回与严格大于给定键的最小键关联的键-值映射关系；如果不存在这样的键，则返回 null。
+    Map.Entry<K,V> higherEntry(K key)
+    // 返回严格大于给定键的最小键；如果不存在这样的键，则返回 null。
+    K higherKey(K key)
+    // 如果此映射未包含键-值映射关系，则返回 true。
+    boolean isEmpty()
+    // 返回此映射中所包含键的 NavigableSet 视图。
+    NavigableSet<K> keySet()
+    // 返回与此映射中的最大键关联的键-值映射关系；如果该映射为空，则返回 null。
+    Map.Entry<K,V> lastEntry()
+    // 返回映射中当前最后一个（最高）键。
+    K lastKey()
+    // 返回与严格小于给定键的最大键关联的键-值映射关系；如果不存在这样的键，则返回 null。
+    Map.Entry<K,V> lowerEntry(K key)
+    // 返回严格小于给定键的最大键；如果不存在这样的键，则返回 null。
+    K lowerKey(K key)
+    // 返回此映射中所包含键的 NavigableSet 视图。
+    NavigableSet<K> navigableKeySet()
+    // 移除并返回与此映射中的最小键关联的键-值映射关系；如果该映射为空，则返回 null。
+    Map.Entry<K,V> pollFirstEntry()
+    // 移除并返回与此映射中的最大键关联的键-值映射关系；如果该映射为空，则返回 null。
+    Map.Entry<K,V> pollLastEntry()
+    // 将指定值与此映射中的指定键关联。
+    V put(K key, V value)
+    // 如果指定键已经不再与某个值相关联，则将它与给定值关联。
+    V putIfAbsent(K key, V value)
+    // 从此映射中移除指定键的映射关系（如果存在）。
+    V remove(Object key)
+    // 只有目前将键的条目映射到给定值时，才移除该键的条目。
+    boolean remove(Object key, Object value)
+    // 只有目前将键的条目映射到某一值时，才替换该键的条目。
+    V replace(K key, V value)
+    // 只有目前将键的条目映射到给定值时，才替换该键的条目。
+    boolean replace(K key, V oldValue, V newValue)
+    // 返回此映射中的键-值映射关系数。
+    int size()
+    // 返回此映射的部分视图，其键的范围从 fromKey 到 toKey。
+    ConcurrentNavigableMap<K,V> subMap(K fromKey, boolean fromInclusive, K toKey, boolean toInclusive)
+    // 返回此映射的部分视图，其键值的范围从 fromKey（包括）到 toKey（不包括）。
+    ConcurrentNavigableMap<K,V> subMap(K fromKey, K toKey)
+    // 返回此映射的部分视图，其键大于等于 fromKey。
+    ConcurrentNavigableMap<K,V> tailMap(K fromKey)
+    // 返回此映射的部分视图，其键大于（或等于，如果 inclusive 为 true）fromKey。
+    ConcurrentNavigableMap<K,V> tailMap(K fromKey, boolean inclusive)
+    // 返回此映射中所包含值的 Collection 视图。
+    Collection<V> values();
 
 }

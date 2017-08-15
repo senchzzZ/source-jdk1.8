@@ -1686,6 +1686,8 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
      *         otherwise never complete
      * @throws RuntimeException or Error if the mappingFunction does so,
      *         in which case the mapping is left unestablished
+     *   如果指定的key不存在，对该key做mappingFunction函数操作，mappingFunction函数返回值不为null，则将对应的k-v放到map中，否则不操作。
+     *   如果key存在返回key对应的value（此时mappingFunction不会调用）
      */
     public V computeIfAbsent(K key, Function<? super K, ? extends V> mappingFunction) {
         if (key == null || mappingFunction == null)
@@ -1787,6 +1789,7 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
      *         otherwise never complete
      * @throws RuntimeException or Error if the remappingFunction does so,
      *         in which case the mapping is unchanged
+     *  类似与computeIfAbsent，仅对已经存在的key才计算新value。同样，如果remappingFunction返回值为null，会删除对应的k-v。
      */
     public V computeIfPresent(K key, BiFunction<? super K, ? super V, ? extends V> remappingFunction) {
         if (key == null || remappingFunction == null)
@@ -1877,6 +1880,8 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
      *         otherwise never complete
      * @throws RuntimeException or Error if the remappingFunction does so,
      *         in which case the mapping is unchanged
+     *    对于指定key做remappingFunction函数调用，remappingFunction函数返回值即为新的value，
+        如果返回值为null，则从map中删除对应的key。compute返回key更新后的值（remappingFunction函数返回值）
      */
     public V compute(K key,
                      BiFunction<? super K, ? super V, ? extends V> remappingFunction) {
@@ -2003,6 +2008,8 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
      *         remappingFunction is null
      * @throws RuntimeException or Error if the remappingFunction does so,
      *         in which case the mapping is unchanged
+     *         当key不存在，直接插入对应value，remappingFunction不会被调用；否则，对oldValue与value做remappingFunction函数，
+     *         结果作为新的newValue插入到map中。同样null结果会删除对应的k-v。
      */
     public V merge(K key, V value, BiFunction<? super V, ? super V, ? extends V> remappingFunction) {
         if (key == null || value == null || remappingFunction == null)
