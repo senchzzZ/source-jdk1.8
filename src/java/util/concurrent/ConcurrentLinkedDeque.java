@@ -259,6 +259,17 @@ public class ConcurrentLinkedDeque<E>
      * - head.item may or may not be null
      * - head may not be reachable from the first or last node, or from tail
      */
+    /**
+     * 在执行方法之前和之后，head 必须保持的不变式：
+         第一个节点总是能以O(1)的时间复杂度从head通过prev链接到达
+         所有“活着”的节点（指未删除节点），都能从第一个节点通过调用 succ() 方法遍历可达。
+         head 不能为 null。
+         head 节点的 next 域不能引用到自身。
+         head 节点一直被gc链接（但是可能自身未链接）
+     在执行方法之前和之后，head 的可变式：
+         head 节点的 item 域可能为 null，也可能不为 null。
+         head 节点可能从第一个或最后一个节点或 tail 节点访问时不可达
+     */
     private transient volatile Node<E> head;
 
     /**
