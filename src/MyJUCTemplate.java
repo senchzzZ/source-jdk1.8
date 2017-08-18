@@ -1614,4 +1614,119 @@ public class MyJUCTemplate {
     // 返回此映射中所包含值的 Collection 视图。
     Collection<V> values();
 
+    /****************************ConcurrentSkipListSet*************************************/
+    // 构造一个新的空 set，该 set 按照元素的自然顺序对其进行排序。
+    ConcurrentSkipListSet()
+    // 构造一个包含指定 collection 中元素的新 set，这个新 set 按照元素的自然顺序对其进行排序。
+    ConcurrentSkipListSet(Collection<? extends E> c)
+    // 构造一个新的空 set，该 set 按照指定的比较器对其元素进行排序。
+    ConcurrentSkipListSet(Comparator<? super E> comparator)
+    // 构造一个新 set，该 set 所包含的元素与指定的有序 set 包含的元素相同，使用的顺序也相同。
+    ConcurrentSkipListSet(SortedSet<E> s)
+
+    // 如果此 set 中不包含指定元素，则添加指定元素。
+    boolean add(E e)
+    // 返回此 set 中大于等于给定元素的最小元素；如果不存在这样的元素，则返回 null。
+    E ceiling(E e)
+    // 从此 set 中移除所有元素。
+    void clear()
+    // 返回此 ConcurrentSkipListSet 实例的浅表副本。
+    ConcurrentSkipListSet<E> clone()
+    // 返回对此 set 中的元素进行排序的比较器；如果此 set 使用其元素的自然顺序，则返回 null。
+    Comparator<? super E> comparator()
+    // 如果此 set 包含指定的元素，则返回 true。
+    boolean contains(Object o)
+    // 返回在此 set 的元素上以降序进行迭代的迭代器。
+    Iterator<E> descendingIterator()
+    // 返回此 set 中所包含元素的逆序视图。
+    NavigableSet<E> descendingSet()
+    // 比较指定对象与此 set 的相等性。
+    boolean equals(Object o)
+    // 返回此 set 中当前第一个（最低）元素。
+    E first()
+    // 返回此 set 中小于等于给定元素的最大元素；如果不存在这样的元素，则返回 null。
+    E floor(E e)
+    // 返回此 set 的部分视图，其元素严格小于 toElement。
+    NavigableSet<E> headSet(E toElement)
+    // 返回此 set 的部分视图，其元素小于（或等于，如果 inclusive 为 true）toElement。
+    NavigableSet<E> headSet(E toElement, boolean inclusive)
+    // 返回此 set 中严格大于给定元素的最小元素；如果不存在这样的元素，则返回 null。
+    E higher(E e)
+    // 如果此 set 不包含任何元素，则返回 true。
+    boolean isEmpty()
+    // 返回在此 set 的元素上以升序进行迭代的迭代器。
+    Iterator<E> iterator()
+    // 返回此 set 中当前最后一个（最高）元素。
+    E last()
+    // 返回此 set 中严格小于给定元素的最大元素；如果不存在这样的元素，则返回 null。
+    E lower(E e)
+    // 获取并移除第一个（最低）元素；如果此 set 为空，则返回 null。
+    E pollFirst()
+    // 获取并移除最后一个（最高）元素；如果此 set 为空，则返回 null。
+    E pollLast()
+    // 如果此 set 中存在指定的元素，则将其移除。
+    boolean remove(Object o)
+    // 从此 set 中移除包含在指定 collection 中的所有元素。
+    boolean removeAll(Collection<?> c)
+    // 返回此 set 中的元素数目。
+    int size()
+    // 返回此 set 的部分视图，其元素范围从 fromElement 到 toElement。
+    NavigableSet<E> subSet(E fromElement, boolean fromInclusive, E toElement, boolean toInclusive)
+    // 返回此 set 的部分视图，其元素从 fromElement（包括）到 toElement（不包括）。
+    NavigableSet<E> subSet(E fromElement, E toElement)
+    // 返回此 set 的部分视图，其元素大于等于 fromElement。
+    NavigableSet<E> tailSet(E fromElement)
+    // 返回此 set 的部分视图，其元素大于（或等于，如果 inclusive 为 true）fromElement。
+    NavigableSet<E> tailSet(E fromElement, boolean inclusive);
+
+    /******************ArrayBlockingQueue*********************************/
+    public ArrayBlockingQueue(int capacity);
+    //创建ArrayBlockingQueue,指定锁类型
+    public ArrayBlockingQueue(int capacity, boolean fair);
+    //指定Collection元素
+    public ArrayBlockingQueue(int capacity, boolean fair,  Collection<? extends E> c);
+    //添加元素到尾部,队列已满抛出IllegalStateException
+    public boolean add(E e);
+    //添加元素到尾部,队列已满返回false
+    public boolean offer(E e);
+    //添加元素到尾部,队列已满等待timeout后无空间返回false
+    public boolean offer(E e, long timeout, TimeUnit unit);
+    //添加元素到尾部,队列已满就等待队列可用
+    public void put(E e);
+    //获取并移除队列头数据
+    public E poll();
+    //获取并移除队列头数据,等待指定时间
+    public E poll(long timeout, TimeUnit unit);
+    //获取并移除队列头数据,无数据一直等待
+    public E take();
+    //获取不移除队列都数据
+    public E peek();
+    //返回队列元素数量
+    public int size();
+    //返回剩余空间
+    public int remainingCapacity();
+    //移除元素
+    public boolean remove(Object o);
+    //返回是否包含o元素
+    public boolean contains(Object o);
+    //返回队列的元素数组
+    public Object[] toArray();
+    //返回队列的元素数组,指定类型
+    public <T> T[] toArray(T[] a);
+    //清空队列
+    public void clear();
+    //移除队列所有可用元素,并添加到c中
+    public int drainTo(Collection<? super E> c);
+    //移除队列中指定数量的元素,并添加到c中
+    public int drainTo(Collection<? super E> c, int maxElements);
+
+
+
+
+
+
+
+
+
+
 }

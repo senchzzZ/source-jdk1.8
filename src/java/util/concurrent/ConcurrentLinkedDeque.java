@@ -274,7 +274,7 @@ public class ConcurrentLinkedDeque<E>
      * - tail may not be reachable from the first or last node, or from head
      */
     private transient volatile Node<E> tail;
-
+    //前一个终止节点，后一个终止节点
     private static final Node<Object> PREV_TERMINATOR, NEXT_TERMINATOR;
 
     @SuppressWarnings("unchecked")
@@ -349,6 +349,7 @@ public class ConcurrentLinkedDeque<E>
     /**
      * Links e as first element.
      */
+    /**入列，插入到队列头*/
     private void linkFirst(E e) {
         checkNotNull(e);
         final Node<E> newNode = new Node<E>(e);
@@ -382,6 +383,7 @@ public class ConcurrentLinkedDeque<E>
     /**
      * Links e as last element.
      */
+    /**入列，插入到队列尾*/
     private void linkLast(E e) {
         checkNotNull(e);
         final Node<E> newNode = new Node<E>(e);
@@ -411,12 +413,13 @@ public class ConcurrentLinkedDeque<E>
                 }
             }
     }
-
+    /**更新 head/tail 的阀值*/
     private static final int HOPS = 2;
 
     /**
      * Unlinks non-null node x.
      */
+    /**移除给定节点*/
     void unlink(Node<E> x) {
         // assert x != null;
         // assert x.item == null;
@@ -528,6 +531,7 @@ public class ConcurrentLinkedDeque<E>
     /**
      * Unlinks non-null first node.
      */
+    /**出列，移除队列头节点*/
     private void unlinkFirst(Node<E> first, Node<E> next) {
         // assert first != null;
         // assert next != null;
@@ -562,6 +566,7 @@ public class ConcurrentLinkedDeque<E>
     /**
      * Unlinks non-null last node.
      */
+    /**出列，移除队列尾节点*/
     private void unlinkLast(Node<E> last, Node<E> prev) {
         // assert last != null;
         // assert prev != null;
@@ -599,6 +604,7 @@ public class ConcurrentLinkedDeque<E>
      * Does not guarantee to eliminate slack, only that head will
      * point to a node that was active while this method was running.
      */
+    /**修改头节点*/
     private final void updateHead() {
         // Either head already points to an active node, or we keep
         // trying to cas it to the first node until it does.
@@ -610,15 +616,16 @@ public class ConcurrentLinkedDeque<E>
                     (q = (p = q).prev) == null) {
                     // It is possible that p is PREV_TERMINATOR,
                     // but if so, the CAS is guaranteed to fail.
+                    //p可能为前一个终止节点，替换head为p节点
                     if (casHead(h, p))
                         return;
                     else
                         continue restartFromHead;
                 }
-                else if (h != head)
+                else if (h != head)//head被别的线程修改
                     continue restartFromHead;
                 else
-                    p = q;
+                    p = q;//继续往下寻找
             }
         }
     }
