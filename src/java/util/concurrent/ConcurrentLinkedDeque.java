@@ -265,7 +265,7 @@ public class ConcurrentLinkedDeque<E>
          所有“活着”的节点（指未删除节点），都能从第一个节点通过调用 succ() 方法遍历可达。
          head 不能为 null。
          head 节点的 next 域不能引用到自身。
-         head 节点一直被gc链接（但是可能自身未链接）
+         head 节点不会是gc-unlinked状态（但可能处于unlinked状态）
      在执行方法之前和之后，head 的可变式：
          head 节点的 item 域可能为 null，也可能不为 null。
          head 节点可能从第一个或最后一个节点或 tail 节点访问时不可达
@@ -284,8 +284,24 @@ public class ConcurrentLinkedDeque<E>
      * - tail.item may or may not be null
      * - tail may not be reachable from the first or last node, or from head
      */
+    /**
+     * 在执行方法之前和之后，tail 必须保持的不变式：
+         最后一个节点总是能以O(1)的时间复杂度从 tail 通过 next 链接到达
+         通过 tail 调用 succ() 方法，最后节点总是可达的。
+         tail 不能为 null。
+         tail 节点不会是gc-unlinked状态（但可能处于unlinked状态）
+     在执行方法之前和之后，tail 的可变式：
+         tail 节点的 item 域可能为 null，也可能不为 null。
+         允许 tail 滞后于 head，也就是说：从 head 开始遍历队列，不一定能到达 tail。
+     */
     private transient volatile Node<E> tail;
-    //前一个终止节点，后一个终止节点
+
+    /**
+     * pre的终止节点(PREV_TERMINATOR.next = PREV_TERMINATOR)
+     * next的终止节点(NEXT_TERMINATOR.pre = NEXT_TERMINATOR)
+     * if(x.prev==first) x.prev=PREV_TERMINATOR
+     * if(x.next==last) x.next=NEXT_TERMINATOR
+     */
     private static final Node<Object> PREV_TERMINATOR, NEXT_TERMINATOR;
 
     @SuppressWarnings("unchecked")
@@ -367,6 +383,7 @@ public class ConcurrentLinkedDeque<E>
 
         restartFromHead:
         for (;;)
+            //从head节点往前寻找first节点
             for (Node<E> h = head, p = h, q;;) {
                 if ((q = p.prev) != null &&
                     (q = (p = q).prev) != null)
@@ -382,7 +399,7 @@ public class ConcurrentLinkedDeque<E>
                         // Successful CAS is the linearization point
                         // for e to become an element of this deque,
                         // and for newNode to become "live".
-                        if (p != h) // hop two nodes at a time
+                        if (p != h) // hop two nodes at a time 跳两个节点时才修改head
                             casHead(h, newNode);  // Failure is OK.
                         return;
                     }
@@ -401,6 +418,7 @@ public class ConcurrentLinkedDeque<E>
 
         restartFromTail:
         for (;;)
+            //从tail节点往后寻找last节点
             for (Node<E> t = tail, p = t, q;;) {
                 if ((q = p.next) != null &&
                     (q = (p = q).next) != null)
@@ -416,7 +434,7 @@ public class ConcurrentLinkedDeque<E>
                         // Successful CAS is the linearization point
                         // for e to become an element of this deque,
                         // and for newNode to become "live".
-                        if (p != t) // hop two nodes at a time
+                        if (p != t) // hop two nodes at a time 跳两个节点时才修改tail
                             casTail(t, newNode);  // Failure is OK.
                         return;
                     }
@@ -440,6 +458,7 @@ public class ConcurrentLinkedDeque<E>
         final Node<E> prev = x.prev;
         final Node<E> next = x.next;
         if (prev == null) {
+            //如果为操作节点为first
             unlinkFirst(x, next);
         } else if (next == null) {
             unlinkLast(x, prev);
@@ -468,7 +487,8 @@ public class ConcurrentLinkedDeque<E>
             int hops = 1;
 
             // Find active predecessor
-            for (Node<E> p = prev; ; ++hops) {
+            //从被操作节点的prev节点开始找到前继活动节点
+            for (Node<E> p = prev; ; ++hops) {          //b
                 if (p.item != null) {
                     activePred = p;
                     isFirst = false;
@@ -489,7 +509,7 @@ public class ConcurrentLinkedDeque<E>
             }
 
             // Find active successor
-            for (Node<E> p = next; ; ++hops) {
+            for (Node<E> p = next; ; ++hops) {          //c
                 if (p.item != null) {
                     activeSucc = p;
                     isLast = false;
@@ -512,12 +532,12 @@ public class ConcurrentLinkedDeque<E>
             // TODO: better HOP heuristics
             if (hops < HOPS
                 // always squeeze out interior deleted nodes
-                && (isFirst | isLast))
+                && (isFirst | isLast))          //d
                 return;
 
             // Squeeze out deleted nodes between activePred and
             // activeSucc, including x.
-            skipDeletedSuccessors(activePred);
+            skipDeletedSuccessors(activePred);            //e
             skipDeletedPredecessors(activeSucc);
 
             // Try to gc-unlink, if possible
@@ -527,7 +547,7 @@ public class ConcurrentLinkedDeque<E>
                 (activePred.next == activeSucc) &&
                 (activeSucc.prev == activePred) &&
                 (isFirst ? activePred.prev == null : activePred.item != null) &&
-                (isLast  ? activeSucc.next == null : activeSucc.item != null)) {
+                (isLast  ? activeSucc.next == null : activeSucc.item != null)) {          //f
 
                 updateHead(); // Ensure x is not reachable from head
                 updateTail(); // Ensure x is not reachable from tail
@@ -542,24 +562,31 @@ public class ConcurrentLinkedDeque<E>
     /**
      * Unlinks non-null first node.
      */
-    /**出列，移除队列头节点*/
+    /**出列，解除头结点链接*/
     private void unlinkFirst(Node<E> first, Node<E> next) {
         // assert first != null;
         // assert next != null;
         // assert first.item == null;
+        //从next节点开始向后寻找有效节点
+        //如果first.next.item!=null，直接返回
         for (Node<E> o = null, p = next, q;;) {
             if (p.item != null || (q = p.next) == null) {
+                //找到合适节点p，cas替换first.next节点为p
                 if (o != null && p.prev != p && first.casNext(next, p)) {
+                    //更新p的prev节点
                     skipDeletedPredecessors(p);
                     if (first.prev == null &&
                         (p.next == null || p.item != null) &&
                         p.prev == first) {
-
+                        //更新head节点，确保已删除节点o从head不可达(unlinking)
                         updateHead(); // Ensure o is not reachable from head
+                        //更新tail节点，确保已删除节点o从tail不可达(unlinking)
                         updateTail(); // Ensure o is not reachable from tail
 
                         // Finally, actually gc-unlink
+                        //使未链接节点指向自身
                         o.lazySetNext(o);
+                        //设置移除节点的prev为PREV_TERMINATOR
                         o.lazySetPrev(prevTerminator());
                     }
                 }
@@ -615,7 +642,7 @@ public class ConcurrentLinkedDeque<E>
      * Does not guarantee to eliminate slack, only that head will
      * point to a node that was active while this method was running.
      */
-    /**修改头节点*/
+    /**更新头节点*/
     private final void updateHead() {
         // Either head already points to an active node, or we keep
         // trying to cas it to the first node until it does.
@@ -627,13 +654,13 @@ public class ConcurrentLinkedDeque<E>
                     (q = (p = q).prev) == null) {
                     // It is possible that p is PREV_TERMINATOR,
                     // but if so, the CAS is guaranteed to fail.
-                    //p可能为前一个终止节点，替换head为p节点
+                    //p可能为pre的终止节点，替换head为p节点
                     if (casHead(h, p))
                         return;
                     else
                         continue restartFromHead;
                 }
-                else if (h != head)//head被别的线程修改
+                else if (h != head)//head被其他线程修改
                     continue restartFromHead;
                 else
                     p = q;//继续往下寻找
@@ -647,6 +674,7 @@ public class ConcurrentLinkedDeque<E>
      * Does not guarantee to eliminate slack, only that tail will
      * point to a node that was active while this method was running.
      */
+    /**更新尾节点*/
     private final void updateTail() {
         // Either tail already points to an active node, or we keep
         // trying to cas it to the last node until it does.
@@ -670,7 +698,7 @@ public class ConcurrentLinkedDeque<E>
             }
         }
     }
-
+    /**更新指定节点的前节点*/
     private void skipDeletedPredecessors(Node<E> x) {
         whileActive:
         do {
@@ -679,29 +707,31 @@ public class ConcurrentLinkedDeque<E>
             // assert x != NEXT_TERMINATOR;
             // assert x != PREV_TERMINATOR;
             Node<E> p = prev;
+            //找到有效活跃节点(item不为空或者前节点为first的节点)
             findActive:
             for (;;) {
                 if (p.item != null)
                     break findActive;
                 Node<E> q = p.prev;
                 if (q == null) {
-                    if (p.next == p)
+                    if (p.next == p)//p可能为self-node
                         continue whileActive;
                     break findActive;
                 }
                 else if (p == q)
                     continue whileActive;
                 else
-                    p = q;
+                    p = q;//继续往前寻找有效节点
             }
 
             // found active CAS target
-            if (prev == p || x.casPrev(prev, p))
+            if (prev == p || x.casPrev(prev, p))//更新前节点
                 return;
 
         } while (x.item != null || x.next == null);
     }
 
+    /**更新指定节点的后继节点*/
     private void skipDeletedSuccessors(Node<E> x) {
         whileActive:
         do {
@@ -710,24 +740,25 @@ public class ConcurrentLinkedDeque<E>
             // assert x != NEXT_TERMINATOR;
             // assert x != PREV_TERMINATOR;
             Node<E> p = next;
+            //找到有效活跃节点(item不为空或者后节点为last的节点)
             findActive:
             for (;;) {
                 if (p.item != null)
                     break findActive;
                 Node<E> q = p.next;
                 if (q == null) {
-                    if (p.prev == p)
+                    if (p.prev == p)//p可能为last节点
                         continue whileActive;
                     break findActive;
                 }
                 else if (p == q)
                     continue whileActive;
                 else
-                    p = q;
+                    p = q;//继续往后寻找
             }
 
             // found active CAS target
-            if (next == p || x.casNext(next, p))
+            if (next == p || x.casNext(next, p))//cas更新next节点
                 return;
 
         } while (x.item != null || x.prev == null);
@@ -738,6 +769,7 @@ public class ConcurrentLinkedDeque<E>
      * linked to self, which will only be true if traversing with a
      * stale pointer that is now off the list.
      */
+    /**返回指定节点的的后继节点，如果指定节点的next指向自己，返回first节点*/
     final Node<E> succ(Node<E> p) {
         // TODO: should we skip deleted nodes here?
         Node<E> q = p.next;
@@ -749,6 +781,7 @@ public class ConcurrentLinkedDeque<E>
      * linked to self, which will only be true if traversing with a
      * stale pointer that is now off the list.
      */
+    /**返回指定节点的的前继节点，如果指定节点的prev指向自己，返回last节点*/
     final Node<E> pred(Node<E> p) {
         Node<E> q = p.prev;
         return (p == q) ? last() : q;
@@ -760,18 +793,22 @@ public class ConcurrentLinkedDeque<E>
      * The returned node may or may not be logically deleted.
      * Guarantees that head is set to the returned node.
      */
+    /**返回首节点*/
     Node<E> first() {
         restartFromHead:
         for (;;)
+            //从head开始往前找
             for (Node<E> h = head, p = h, q;;) {
                 if ((q = p.prev) != null &&
                     (q = (p = q).prev) != null)
                     // Check for head updates every other hop.
                     // If p == q, we are sure to follow head instead.
+                    //如果head被其他修改返回新的head否则返回q继续往前循环寻找
                     p = (h != (h = head)) ? h : q;
                 else if (p == h
                          // It is possible that p is PREV_TERMINATOR,
                          // but if so, the CAS is guaranteed to fail.
+                        //p!=h需要cas替换head
                          || casHead(h, p))
                     return p;
                 else
@@ -785,6 +822,7 @@ public class ConcurrentLinkedDeque<E>
      * The returned node may or may not be logically deleted.
      * Guarantees that tail is set to the returned node.
      */
+    /**返回尾节点*/
     Node<E> last() {
         restartFromTail:
         for (;;)
@@ -904,6 +942,7 @@ public class ConcurrentLinkedDeque<E>
      *
      * @throws NullPointerException if the specified element is null
      */
+    /**添加元素到队列头*/
     public void addFirst(E e) {
         linkFirst(e);
     }
@@ -917,6 +956,7 @@ public class ConcurrentLinkedDeque<E>
      *
      * @throws NullPointerException if the specified element is null
      */
+    /**添加元素到队列尾*/
     public void addLast(E e) {
         linkLast(e);
     }
@@ -928,6 +968,7 @@ public class ConcurrentLinkedDeque<E>
      * @return {@code true} (as specified by {@link Deque#offerFirst})
      * @throws NullPointerException if the specified element is null
      */
+    /**添加元素到队列头，成功返回true*/
     public boolean offerFirst(E e) {
         linkFirst(e);
         return true;
@@ -942,11 +983,13 @@ public class ConcurrentLinkedDeque<E>
      * @return {@code true} (as specified by {@link Deque#offerLast})
      * @throws NullPointerException if the specified element is null
      */
+    /**添加元素到队列尾，成功返回true*/
     public boolean offerLast(E e) {
         linkLast(e);
         return true;
     }
 
+    /**获取队列首节点*/
     public E peekFirst() {
         for (Node<E> p = first(); p != null; p = succ(p)) {
             E item = p.item;
@@ -955,7 +998,7 @@ public class ConcurrentLinkedDeque<E>
         }
         return null;
     }
-
+    /**获取队列尾节点*/
     public E peekLast() {
         for (Node<E> p = last(); p != null; p = pred(p)) {
             E item = p.item;
@@ -968,6 +1011,7 @@ public class ConcurrentLinkedDeque<E>
     /**
      * @throws NoSuchElementException {@inheritDoc}
      */
+    /**获取队列首节点，失败抛出NoSuchElementException*/
     public E getFirst() {
         return screenNullResult(peekFirst());
     }
@@ -975,10 +1019,12 @@ public class ConcurrentLinkedDeque<E>
     /**
      * @throws NoSuchElementException {@inheritDoc}
      */
+    /**获取队列尾节点，失败抛出NoSuchElementException*/
     public E getLast() {
         return screenNullResult(peekLast());
     }
 
+    /**获取并移除队列首节点*/
     public E pollFirst() {
         for (Node<E> p = first(); p != null; p = succ(p)) {
             E item = p.item;
@@ -989,7 +1035,7 @@ public class ConcurrentLinkedDeque<E>
         }
         return null;
     }
-
+    /**获取并移除队列尾节点*/
     public E pollLast() {
         for (Node<E> p = last(); p != null; p = pred(p)) {
             E item = p.item;
@@ -1004,6 +1050,7 @@ public class ConcurrentLinkedDeque<E>
     /**
      * @throws NoSuchElementException {@inheritDoc}
      */
+    /**获取并移除队列首节点，NoSuchElementException*/
     public E removeFirst() {
         return screenNullResult(pollFirst());
     }
@@ -1011,6 +1058,7 @@ public class ConcurrentLinkedDeque<E>
     /**
      * @throws NoSuchElementException {@inheritDoc}
      */
+    /**获取并移除队列尾节点，NoSuchElementException*/
     public E removeLast() {
         return screenNullResult(pollLast());
     }
@@ -1024,6 +1072,7 @@ public class ConcurrentLinkedDeque<E>
      * @return {@code true} (as specified by {@link Queue#offer})
      * @throws NullPointerException if the specified element is null
      */
+    /**添加节点到队列尾{@link Queue#offer}*/
     public boolean offer(E e) {
         return offerLast(e);
     }
@@ -1036,31 +1085,37 @@ public class ConcurrentLinkedDeque<E>
      * @return {@code true} (as specified by {@link Collection#add})
      * @throws NullPointerException if the specified element is null
      */
+    /**添加节点到队列尾{@link Collection#add}*/
     public boolean add(E e) {
         return offerLast(e);
     }
-
+    /**获取并移除队列头节点*/
     public E poll()           { return pollFirst(); }
+    /**获取队列头节点，不移除*/
     public E peek()           { return peekFirst(); }
 
     /**
      * @throws NoSuchElementException {@inheritDoc}
      */
+    /**获取并移除队列头节点，失败抛出NoSuchElementException*/
     public E remove()         { return removeFirst(); }
 
     /**
      * @throws NoSuchElementException {@inheritDoc}
      */
+    /**获取并移除队列头节点，失败抛出NoSuchElementException*/
     public E pop()            { return removeFirst(); }
 
     /**
      * @throws NoSuchElementException {@inheritDoc}
      */
+    /**获取队列头节点，不移除*/
     public E element()        { return getFirst(); }
 
     /**
      * @throws NullPointerException {@inheritDoc}
      */
+    /**添加节点到队列头*/
     public void push(E e)     { addFirst(e); }
 
     /**
@@ -1072,6 +1127,7 @@ public class ConcurrentLinkedDeque<E>
      * @return {@code true} if the deque contained the specified element
      * @throws NullPointerException if the specified element is null
      */
+    /**从队列头开始向后寻找，移除指定元素所在的节点*/
     public boolean removeFirstOccurrence(Object o) {
         checkNotNull(o);
         for (Node<E> p = first(); p != null; p = succ(p)) {
@@ -1093,6 +1149,7 @@ public class ConcurrentLinkedDeque<E>
      * @return {@code true} if the deque contained the specified element
      * @throws NullPointerException if the specified element is null
      */
+    /**从队列尾开始向前寻找，移除指定元素所在的节点*/
     public boolean removeLastOccurrence(Object o) {
         checkNotNull(o);
         for (Node<E> p = last(); p != null; p = pred(p)) {
@@ -1112,6 +1169,7 @@ public class ConcurrentLinkedDeque<E>
      * @param o element whose presence in this deque is to be tested
      * @return {@code true} if this deque contains the specified element
      */
+    /**返回是否包含指定元素*/
     public boolean contains(Object o) {
         if (o == null) return false;
         for (Node<E> p = first(); p != null; p = succ(p)) {
@@ -1127,6 +1185,7 @@ public class ConcurrentLinkedDeque<E>
      *
      * @return {@code true} if this collection contains no elements
      */
+    /**返回是否为空队列*/
     public boolean isEmpty() {
         return peekFirst() == null;
     }
@@ -1147,6 +1206,7 @@ public class ConcurrentLinkedDeque<E>
      *
      * @return the number of elements in this deque
      */
+    /**返回队列元素数量，不一定准确*/
     public int size() {
         int count = 0;
         for (Node<E> p = first(); p != null; p = succ(p))
@@ -1166,6 +1226,7 @@ public class ConcurrentLinkedDeque<E>
      * @return {@code true} if the deque contained the specified element
      * @throws NullPointerException if the specified element is null
      */
+    /**从队列头开始寻找，移除指定元素*/
     public boolean remove(Object o) {
         return removeFirstOccurrence(o);
     }
@@ -1182,6 +1243,7 @@ public class ConcurrentLinkedDeque<E>
      *         of its elements are null
      * @throws IllegalArgumentException if the collection is this deque
      */
+    /**添加指定Collection到队列中*/
     public boolean addAll(Collection<? extends E> c) {
         if (c == this)
             // As historically specified in AbstractQueue#addAll
@@ -1237,6 +1299,7 @@ public class ConcurrentLinkedDeque<E>
     /**
      * Removes all of the elements from this deque.
      */
+    /**清空队列*/
     public void clear() {
         while (pollFirst() != null)
             ;
@@ -1255,6 +1318,7 @@ public class ConcurrentLinkedDeque<E>
      *
      * @return an array containing all of the elements in this deque
      */
+    /**返回队列的所有元素数组*/
     public Object[] toArray() {
         return toArrayList().toArray();
     }
@@ -1296,6 +1360,7 @@ public class ConcurrentLinkedDeque<E>
      *         this deque
      * @throws NullPointerException if the specified array is null
      */
+    /**返回队列的所有元素数组，指定元素类型*/
     public <T> T[] toArray(T[] a) {
         return toArrayList().toArray(a);
     }
@@ -1309,6 +1374,7 @@ public class ConcurrentLinkedDeque<E>
      *
      * @return an iterator over the elements in this deque in proper sequence
      */
+    /**正序迭代器*/
     public Iterator<E> iterator() {
         return new Itr();
     }
@@ -1323,6 +1389,7 @@ public class ConcurrentLinkedDeque<E>
      *
      * @return an iterator over the elements in this deque in reverse order
      */
+    /**反序迭代器*/
     public Iterator<E> descendingIterator() {
         return new DescendingItr();
     }
