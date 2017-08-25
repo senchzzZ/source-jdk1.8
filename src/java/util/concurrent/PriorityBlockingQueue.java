@@ -129,6 +129,7 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
     /**
      * Default array capacity.
      */
+    //默认容量
     private static final int DEFAULT_INITIAL_CAPACITY = 11;
 
     /**
@@ -137,6 +138,7 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
      * Attempts to allocate larger arrays may result in
      * OutOfMemoryError: Requested array size exceeds VM limit
      */
+    //数组最大长度
     private static final int MAX_ARRAY_SIZE = Integer.MAX_VALUE - 8;
 
     /**
@@ -146,6 +148,8 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
      * natural ordering, if comparator is null: For each node n in the
      * heap and each descendant d of n, n <= d.  The element with the
      * lowest value is in queue[0], assuming the queue is nonempty.
+     *
+     * 基于一个平衡的二元堆实现
      */
     private transient Object[] queue;
 
@@ -173,6 +177,7 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
     /**
      * Spinlock for allocation, acquired via CAS.
      */
+    /**初始0为可获取状态，用于控制扩容操作*/
     private transient volatile int allocationSpinLock;
 
     /**
@@ -282,6 +287,7 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
      * on contention (which we expect to be rare). Call only while
      * holding lock.
      *
+     * 队列扩容（一般是原数组长度的1.5倍，如果数组长度小于64，扩容至2*(cap+1)）
      * @param array the heap array
      * @param oldCap the length of the array
      */
@@ -292,6 +298,7 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
             UNSAFE.compareAndSwapInt(this, allocationSpinLockOffset,
                                      0, 1)) {
             try {
+                //计算新的数组容量（1.5*cap或2*(cap+1)）
                 int newCap = oldCap + ((oldCap < 64) ?
                                        (oldCap + 2) : // grow faster if small
                                        (oldCap >> 1));
@@ -307,6 +314,7 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
                 allocationSpinLock = 0;
             }
         }
+        //如果有其他线程已经在进行扩容操作，当前线程让出执行时间片
         if (newArray == null) // back off if another thread is allocating
             Thread.yield();
         lock.lock();
@@ -319,6 +327,7 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
     /**
      * Mechanics for poll().  Call only while holding lock.
      */
+    //出列
     private E dequeue() {
         int n = size - 1;
         if (n < 0)
@@ -329,6 +338,7 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
             E x = (E) array[n];
             array[n] = null;
             Comparator<? super E> cmp = comparator;
+
             if (cmp == null)
                 siftDownComparable(0, x, array, n);
             else
@@ -353,6 +363,7 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
      * @param x the item to insert
      * @param array the heap array
      */
+    /**在k位置插入元素x，从父节点开始向上找到合适位置，保持二元堆的性质不变*/
     private static <T> void siftUpComparable(int k, T x, Object[] array) {
         Comparable<? super T> key = (Comparable<? super T>) x;
         while (k > 0) {
@@ -389,12 +400,14 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
      * @param array the heap array
      * @param n heap size
      */
+    /**在k位置插入元素x，从子节点开始向下找到合适位置，保持二元堆的性质不变*/
     private static <T> void siftDownComparable(int k, T x, Object[] array,
                                                int n) {
         if (n > 0) {
             Comparable<? super T> key = (Comparable<? super T>)x;
             int half = n >>> 1;           // loop while a non-leaf
             while (k < half) {
+                //从左叶子节点查找
                 int child = (k << 1) + 1; // assume left child is least
                 Object c = array[child];
                 int right = child + 1;
@@ -433,6 +446,7 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
     /**
      * Establishes the heap invariant (described above) in the entire tree,
      * assuming nothing about the order of the elements prior to the call.
+     * 创建二叉堆，假设调用前元素没有顺序
      */
     private void heapify() {
         Object[] array = queue;
@@ -474,6 +488,7 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
      *         priority queue's ordering
      * @throws NullPointerException if the specified element is null
      */
+    //添加元素
     public boolean offer(E e) {
         if (e == null)
             throw new NullPointerException();
@@ -482,9 +497,11 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
         int n, cap;
         Object[] array;
         while ((n = size) >= (cap = (array = queue).length))
+            //队列扩容
             tryGrow(array, cap);
         try {
             Comparator<? super E> cmp = comparator;
+            //找到合适位置插入元素
             if (cmp == null)
                 siftUpComparable(n, e, array);
             else
@@ -530,6 +547,7 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
         return offer(e); // never need to block
     }
 
+    /**获取并移除首元素*/
     public E poll() {
         final ReentrantLock lock = this.lock;
         lock.lock();
@@ -539,7 +557,7 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
             lock.unlock();
         }
     }
-
+    /**获取并移除首元素，一直等待首元素可用*/
     public E take() throws InterruptedException {
         final ReentrantLock lock = this.lock;
         lock.lockInterruptibly();
@@ -566,7 +584,7 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
         }
         return result;
     }
-
+    /**获取首元素，不移除*/
     public E peek() {
         final ReentrantLock lock = this.lock;
         lock.lock();
@@ -586,6 +604,7 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
      *         or {@code null} if this queue uses the natural
      *         ordering of its elements
      */
+    /**返回队列的comparator*/
     public Comparator<? super E> comparator() {
         return comparator;
     }
@@ -657,6 +676,7 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
      * @param o element to be removed from this queue, if present
      * @return {@code true} if this queue changed as a result of the call
      */
+    /**移除指定元素*/
     public boolean remove(Object o) {
         final ReentrantLock lock = this.lock;
         lock.lock();
@@ -768,6 +788,7 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
      * @throws NullPointerException          {@inheritDoc}
      * @throws IllegalArgumentException      {@inheritDoc}
      */
+    /**移除指定数量的元素，并添加到指定collection中*/
     public int drainTo(Collection<? super E> c, int maxElements) {
         if (c == null)
             throw new NullPointerException();
