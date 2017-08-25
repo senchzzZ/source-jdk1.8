@@ -67,6 +67,7 @@ import java.util.*;
  * @author Doug Lea
  * @param <E> the type of elements held in this collection
  */
+//放入的元素必须实现Delayed接口
 public class DelayQueue<E extends Delayed> extends AbstractQueue<E>
     implements BlockingQueue<E> {
 
@@ -122,6 +123,7 @@ public class DelayQueue<E extends Delayed> extends AbstractQueue<E>
      * @return {@code true} (as specified by {@link Collection#add})
      * @throws NullPointerException if the specified element is null
      */
+    /**添加元素*/
     public boolean add(E e) {
         return offer(e);
     }
@@ -133,10 +135,12 @@ public class DelayQueue<E extends Delayed> extends AbstractQueue<E>
      * @return {@code true}
      * @throws NullPointerException if the specified element is null
      */
+    /**添加元素*/
     public boolean offer(E e) {
         final ReentrantLock lock = this.lock;
         lock.lock();
         try {
+            //调用priorityQueue的offer出列
             q.offer(e);
             if (q.peek() == e) {
                 leader = null;
@@ -180,6 +184,7 @@ public class DelayQueue<E extends Delayed> extends AbstractQueue<E>
      * @return the head of this queue, or {@code null} if this
      *         queue has no elements with an expired delay
      */
+    /**获取并移除头元素*/
     public E poll() {
         final ReentrantLock lock = this.lock;
         lock.lock();
@@ -201,35 +206,38 @@ public class DelayQueue<E extends Delayed> extends AbstractQueue<E>
      * @return the head of this queue
      * @throws InterruptedException {@inheritDoc}
      */
+    /**获取并移除头元素，一直等待元素可用*/
     public E take() throws InterruptedException {
         final ReentrantLock lock = this.lock;
         lock.lockInterruptibly();
         try {
+            //自旋
             for (;;) {
                 E first = q.peek();
-                if (first == null)
+                if (first == null)//首节点为空，等待
                     available.await();
                 else {
                     long delay = first.getDelay(NANOSECONDS);
                     if (delay <= 0)
                         return q.poll();
+                    //释放first的引用，避免内存泄漏
                     first = null; // don't retain ref while waiting
-                    if (leader != null)
+                    if (leader != null)//leader不为空，证明有其他线程已经获取到leader，加入条件队列
                         available.await();
                     else {
                         Thread thisThread = Thread.currentThread();
-                        leader = thisThread;
+                        leader = thisThread;//leader指向当前线程
                         try {
                             available.awaitNanos(delay);
                         } finally {
-                            if (leader == thisThread)
+                            if (leader == thisThread)//检查是否被其他线程改变，没有就重置，再次循环
                                 leader = null;
                         }
                     }
                 }
             }
         } finally {
-            if (leader == null && q.peek() != null)
+            if (leader == null && q.peek() != null)//leader为空并且队列不空，说明没有其他线程在等待，那就通知条件队列
                 available.signal();
             lock.unlock();
         }
@@ -296,6 +304,7 @@ public class DelayQueue<E extends Delayed> extends AbstractQueue<E>
      * @return the head of this queue, or {@code null} if this
      *         queue is empty
      */
+    /**获取元素，不移除*/
     public E peek() {
         final ReentrantLock lock = this.lock;
         lock.lock();
@@ -305,7 +314,7 @@ public class DelayQueue<E extends Delayed> extends AbstractQueue<E>
             lock.unlock();
         }
     }
-
+    /**返回队列元素数量*/
     public int size() {
         final ReentrantLock lock = this.lock;
         lock.lock();
@@ -333,6 +342,7 @@ public class DelayQueue<E extends Delayed> extends AbstractQueue<E>
      * @throws NullPointerException          {@inheritDoc}
      * @throws IllegalArgumentException      {@inheritDoc}
      */
+    /**移除队列中可用元素，添加到指定Collection中*/
     public int drainTo(Collection<? super E> c) {
         if (c == null)
             throw new NullPointerException();
@@ -387,6 +397,7 @@ public class DelayQueue<E extends Delayed> extends AbstractQueue<E>
      * Elements with an unexpired delay are not waited for; they are
      * simply discarded from the queue.
      */
+    /**清空队列*/
     public void clear() {
         final ReentrantLock lock = this.lock;
         lock.lock();
@@ -403,6 +414,7 @@ public class DelayQueue<E extends Delayed> extends AbstractQueue<E>
      *
      * @return {@code Integer.MAX_VALUE}
      */
+    /**返回队列剩余空间*/
     public int remainingCapacity() {
         return Integer.MAX_VALUE;
     }

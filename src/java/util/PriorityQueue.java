@@ -333,14 +333,17 @@ public class PriorityQueue<E> extends AbstractQueue<E>
     public boolean offer(E e) {
         if (e == null)
             throw new NullPointerException();
-        modCount++;
+        modCount++;//代表队列结构被修改的次数
         int i = size;
         if (i >= queue.length)
+            //扩容操作
             grow(i + 1);
         size = i + 1;
         if (i == 0)
+            //队列元素数为0直接添加
             queue[0] = e;
         else
+            //通过comparator找到合适位置添加
             siftUp(i, e);
         return true;
     }
@@ -589,6 +592,7 @@ public class PriorityQueue<E> extends AbstractQueue<E>
         int s = --size;
         modCount++;
         E result = (E) queue[0];
+        //获取尾元素
         E x = (E) queue[s];
         queue[s] = null;
         if (s != 0)
@@ -639,6 +643,9 @@ public class PriorityQueue<E> extends AbstractQueue<E>
      *
      * @param k the position to fill
      * @param x the item to insert
+     *
+     * 把x元素插入到指定位置，从父节点向上查找到合适位置(大于等于父节点)
+     * 插入过程中保持堆的性质不变
      */
     private void siftUp(int k, E x) {
         if (comparator != null)
@@ -651,6 +658,7 @@ public class PriorityQueue<E> extends AbstractQueue<E>
     private void siftUpComparable(int k, E x) {
         Comparable<? super E> key = (Comparable<? super E>) x;
         while (k > 0) {
+            //从中段开始查找合适位置（堆排序）
             int parent = (k - 1) >>> 1;
             Object e = queue[parent];
             if (key.compareTo((E) e) >= 0)
@@ -681,6 +689,9 @@ public class PriorityQueue<E> extends AbstractQueue<E>
      *
      * @param k the position to fill
      * @param x the item to insert
+     *
+     * 把x元素插入到指定位置，从子节点向下查找到合适位置(小于等于子节点)
+     * 插入过程中保持堆的性质不变
      */
     private void siftDown(int k, E x) {
         if (comparator != null)
