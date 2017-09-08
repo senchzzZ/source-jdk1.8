@@ -411,6 +411,7 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
      */
 
     /** True if on multiprocessor */
+    /**是否为多处理器*/
     private static final boolean MP =
         Runtime.getRuntime().availableProcessors() > 1;
 
@@ -421,6 +422,8 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
      * explanation. Must be a power of two. The value is empirically
      * derived -- it works pretty well across a variety of processors,
      * numbers of CPUs, and OSes.
+     *
+     * 当一个节点是队列中的第一个waiter时，在多处理器上进行自旋的次数(随机穿插调用thread.yield)
      */
     private static final int FRONT_SPINS   = 1 << 7;
 
@@ -430,6 +433,9 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
      * serves as an increment to FRONT_SPINS on phase changes, and as
      * base average frequency for yielding during spins. Must be a
      * power of two.
+     *
+     * 当前继节点正在处理，当前节点在阻塞之前的自旋次数，也为FRONT_SPINS
+     * 的位变化充当增量，也可在自旋时作为yield的平均频率
      */
     private static final int CHAINED_SPINS = FRONT_SPINS >>> 1;
 
@@ -439,6 +445,9 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
      * cancelled nodes that were not unlinked upon initial
      * removal. See above for explanation. The value must be at least
      * two to avoid useless sweeps when removing trailing nodes.
+     *
+     * sweepVotes的阀值
+     * 为了避免无用的扫描，当移除后续节点时值必须大于等于2
      */
     static final int SWEEP_THRESHOLD = 32;
 
@@ -467,6 +476,8 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
         /**
          * Constructs a new node.  Uses relaxed write because item can
          * only be seen after publication via casNext.
+         * 由于item只有在通过casNext公开之后才会被看到，这里使用UNSAFE直接
+         * 修改内存数据
          */
         Node(Object item, boolean isData) {
             UNSAFE.putObject(this, itemOffset, item); // relaxed write
@@ -476,6 +487,7 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
         /**
          * Links node to itself to avoid garbage retention.  Called
          * only after CASing head field, so uses relaxed write.
+         * next节点指向自身避免垃圾保留。只有在cas修改head时调用
          */
         final void forgetNext() {
             UNSAFE.putObject(this, nextOffset, this);
@@ -489,6 +501,7 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
          * mechanics that extract items.  Similarly, clearing waiter
          * follows either CAS or return from park (if ever parked;
          * else we don't care).
+         * 匹配或取消节点后使节点item指向自身，waiter设为null，避免垃圾保留。
          */
         final void forgetContents() {
             UNSAFE.putObject(this, itemOffset, this);
@@ -515,6 +528,7 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
          * Returns true if a node with the given mode cannot be
          * appended to this node because this node is unmatched and
          * has opposite data mode.
+         * 如果节点模式和给定mode不同返回true，因为此节点未匹配并且有相反的模式
          */
         final boolean cannotPrecede(boolean haveData) {
             boolean d = isData;
@@ -559,12 +573,15 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
     }
 
     /** head of the queue; null until first enqueue */
+    //队列头节点，第一次入列之前为空
     transient volatile Node head;
 
     /** tail of the queue; null until first append */
+    //队列尾节点，第一次添加节点之前为空
     private transient volatile Node tail;
 
     /** The number of apparent failures to unsplice removed nodes */
+    //累计到一定次数再清除未链接node
     private transient volatile int sweepVotes;
 
     // CAS methods for fields
@@ -582,6 +599,7 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
 
     /*
      * Possible values for "how" argument in xfer method.
+     * xfer方法类型
      */
     private static final int NOW   = 0; // for untimed poll, tryTransfer
     private static final int ASYNC = 1; // for offer, put, add
@@ -611,22 +629,22 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
 
         retry:
         for (;;) {                            // restart on append race
-
+            //从head开始向后匹配
             for (Node h = head, p = h; p != null;) { // find & match first node
                 boolean isData = p.isData;
                 Object item = p.item;
-                if (item != p && (item != null) == isData) { // unmatched
-                    if (isData == haveData)   // can't match
+                if (item != p && (item != null) == isData) { //未找到有效节点或未匹配到，p=p.next继续循环 unmatched
+                    if (isData == haveData)   //节点与此次操作模式一致，无法匹配 can't match
                         break;
                     if (p.casItem(item, e)) { // match
                         for (Node q = p; q != h;) {
                             Node n = q.next;  // update by 2 unless singleton
                             if (head == h && casHead(h, n == null ? q : n)) {
-                                h.forgetNext();
+                                h.forgetNext();//旧head节点指向自身等待回收
                                 break;
                             }                 // advance and retry
                             if ((h = head)   == null ||
-                                (q = h.next) == null || !q.isMatched())
+                                    (q = h.next) == null || !q.isMatched())//竞争失败继续向下寻找
                                 break;        // unless slack < 2
                         }
                         LockSupport.unpark(p.waiter);
@@ -640,10 +658,11 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
             if (how != NOW) {                 // No matches available
                 if (s == null)
                     s = new Node(e, haveData);
+                //将新节点s添加到队列尾并返回s.pred
                 Node pred = tryAppend(s, haveData);
                 if (pred == null)
-                    continue retry;           // lost race vs opposite mode
-                if (how != ASYNC)
+                    continue retry;           //与其他不同模式线程竞争失败重新循环 lost race vs opposite mode
+                if (how != ASYNC)//同步操作，等待匹配
                     return awaitMatch(s, pred, e, (how == TIMED), nanos);
             }
             return e; // not waiting
@@ -652,6 +671,7 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
 
     /**
      * Tries to append node s as tail.
+     * 尝试添加给定节点s作为尾节点
      *
      * @param s the node to append
      * @param haveData true if appending in data mode
@@ -662,8 +682,8 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
     private Node tryAppend(Node s, boolean haveData) {
         for (Node t = tail, p = t;;) {        // move p to last node and append
             Node n, u;                        // temps for reads of next & tail
-            if (p == null && (p = head) == null) {
-                if (casHead(null, s))
+            if (p == null && (p = head) == null) {//head和tail都为null
+                if (casHead(null, s))//修改head为新节点s
                     return s;                 // initialize
             }
             else if (p.cannotPrecede(haveData))
@@ -687,6 +707,7 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
 
     /**
      * Spins/yields/blocks until node s is matched or caller gives up.
+     * 自旋/让步/阻塞,直到给定节点s匹配到或放弃匹配
      *
      * @param s the waiting node
      * @param pred the predecessor of s, or s itself if it has no
@@ -700,19 +721,20 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
     private E awaitMatch(Node s, Node pred, E e, boolean timed, long nanos) {
         final long deadline = timed ? System.nanoTime() + nanos : 0L;
         Thread w = Thread.currentThread();
+        //在首个item和取消检查后初始
         int spins = -1; // initialized after first item and cancel checks
         ThreadLocalRandom randomYields = null; // bound if needed
 
         for (;;) {
             Object item = s.item;
-            if (item != e) {                  // matched
+            if (item != e) {                  //matched
                 // assert item != s;
                 s.forgetContents();           // avoid garbage
                 return LinkedTransferQueue.<E>cast(item);
             }
             if ((w.isInterrupted() || (timed && nanos <= 0)) &&
-                    s.casItem(e, s)) {        // cancel
-                unsplice(pred, s);
+                    s.casItem(e, s)) {        //取消匹配，item指向自身 cancel
+                unsplice(pred, s);//解除s节点和前继节点的链接
                 return e;
             }
 
@@ -723,7 +745,7 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
             else if (spins > 0) {             // spin
                 --spins;
                 if (randomYields.nextInt(CHAINED_SPINS) == 0)
-                    Thread.yield();           // occasionally yield
+                    Thread.yield();           //不定期让步，给其他线程执行机会 occasionally yield
             }
             else if (s.waiter == null) {
                 s.waiter = w;                 // request unpark then recheck
@@ -742,6 +764,8 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
     /**
      * Returns spin/yield value for a node with given predecessor and
      * data mode. See above for explanation.
+     *
+     * 通过给定前节点和数据模式返回自旋/yield次数
      */
     private static int spinsFor(Node pred, boolean haveData) {
         if (MP && pred != null) {
@@ -770,6 +794,8 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
     /**
      * Returns the first unmatched node of the given mode, or null if
      * none.  Used by methods isEmpty, hasWaitingConsumer.
+     *
+     * 通过给定模式返回第一个未被匹配的节点
      */
     private Node firstOfMode(boolean isData) {
         for (Node p = head; p != null; p = succ(p)) {
@@ -1049,6 +1075,7 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
      * Unsplices (now or later) the given deleted/cancelled node with
      * the given predecessor.
      *
+     * 解除给定已经被删除/取消节点和前继节点的链接（可能延迟解除）
      * @param pred a node that was at one time known to be the
      * predecessor of s, or null or s itself if s is/was at head
      * @param s the node to be unspliced
@@ -1061,6 +1088,9 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
          * trailing node or pred might be unlinked, and neither pred
          * nor s are head or offlist, add to sweepVotes, and if enough
          * votes have accumulated, sweep.
+         * 原理：如果pred(s.pred)==s，尝试解除s的链接。如果s不能被解除(由于
+         * 他是尾节点或者s.pred可能被解除链接，并且pred和s都不是head节点或已经出列)，
+         * 则增加sweepVotes，累计到一定数量再清除
          */
         if (pred != null && pred != s && pred.next == s) {
             Node n = s.next;
@@ -1085,7 +1115,7 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
                             if (casSweepVotes(v, v + 1))
                                 break;
                         }
-                        else if (casSweepVotes(v, 0)) {
+                        else if (casSweepVotes(v, 0)) {//达到阀值，清除无效节点
                             sweep();
                             break;
                         }
@@ -1098,6 +1128,7 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
     /**
      * Unlinks matched (typically cancelled) nodes encountered in a
      * traversal from head.
+     * 解除(通常是取消)从头部遍历时遇到的已经被匹配的节点的链接
      */
     private void sweep() {
         for (Node p = head, s, n; p != null && (s = p.next) != null; ) {
@@ -1166,6 +1197,7 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
      *
      * @throws NullPointerException if the specified element is null
      */
+    /**添加指定元素到队列尾*/
     public void put(E e) {
         xfer(e, true, ASYNC, 0);
     }
@@ -1180,6 +1212,9 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
      *  BlockingQueue.offer})
      * @throws NullPointerException if the specified element is null
      */
+    /**
+     * 插入指定元素到队列尾，返回true
+     */
     public boolean offer(E e, long timeout, TimeUnit unit) {
         xfer(e, true, ASYNC, 0);
         return true;
@@ -1191,6 +1226,9 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
      *
      * @return {@code true} (as specified by {@link Queue#offer})
      * @throws NullPointerException if the specified element is null
+     */
+    /**
+     * 添加指定元素到队列尾{@link Queue#offer}
      */
     public boolean offer(E e) {
         xfer(e, true, ASYNC, 0);
@@ -1204,6 +1242,9 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
      *
      * @return {@code true} (as specified by {@link Collection#add})
      * @throws NullPointerException if the specified element is null
+     */
+    /**
+     * 添加指定元素到队列尾{@link Collection#add}
      */
     public boolean add(E e) {
         xfer(e, true, ASYNC, 0);
@@ -1220,6 +1261,10 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
      *
      * @throws NullPointerException if the specified element is null
      */
+    /**
+     * 如果有消费者正在等待接收元素，立即把给定元素转移给等待的消费者
+     * 无消费者返回false
+     */
     public boolean tryTransfer(E e) {
         return xfer(e, true, NOW, 0) == null;
     }
@@ -1234,6 +1279,10 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
      * and waits until the element is received by a consumer.
      *
      * @throws NullPointerException if the specified element is null
+     */
+    /**
+     * 如果有消费者正在等待接收元素，立即把给定元素转移给等待的消费者
+     * 否则插入给定元素到队列尾并等待直到元素被消费者接收
      */
     public void transfer(E e) throws InterruptedException {
         if (xfer(e, true, SYNC, 0) != null) {
