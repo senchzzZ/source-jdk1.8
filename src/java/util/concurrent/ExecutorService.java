@@ -153,6 +153,10 @@ public interface ExecutorService extends Executor {
      *         or the security manager's {@code checkAccess} method
      *         denies access.
      */
+    /**
+     * 发送一个shutdown指令，等待以前的任务执行完毕再关闭，但是不再接收
+     * 新的任务
+     */
     void shutdown();
 
     /**
@@ -177,6 +181,9 @@ public interface ExecutorService extends Executor {
      *         java.lang.RuntimePermission}{@code ("modifyThread")},
      *         or the security manager's {@code checkAccess} method
      *         denies access.
+     */
+    /**
+     * 尝试停止所有正在执行的任务，停止等待任务的处理，并返回等待执行的任务列表
      */
     List<Runnable> shutdownNow();
 
@@ -207,6 +214,10 @@ public interface ExecutorService extends Executor {
      *         {@code false} if the timeout elapsed before termination
      * @throws InterruptedException if interrupted while waiting
      */
+    /**
+     * 发送一个shutdown请求之后开始阻塞，直到所有任务都完成执行，或者超时，或
+     * 当前线程被中断
+     */
     boolean awaitTermination(long timeout, TimeUnit unit)
         throws InterruptedException;
 
@@ -232,6 +243,10 @@ public interface ExecutorService extends Executor {
      * @throws RejectedExecutionException if the task cannot be
      *         scheduled for execution
      * @throws NullPointerException if the task is null
+     */
+    /**
+     * 提交一个有返回值的任务并返回Future（表示任务的未决结果）
+     * 任务执行成功后可调用Future.get获取任务返回的结果
      */
     <T> Future<T> submit(Callable<T> task);
 
@@ -337,6 +352,9 @@ public interface ExecutorService extends Executor {
      * @throws ExecutionException if no task successfully completes
      * @throws RejectedExecutionException if tasks cannot be scheduled
      *         for execution
+     */
+    /**
+     * 返回任意一个已经完成执行的结果
      */
     <T> T invokeAny(Collection<? extends Callable<T>> tasks)
         throws InterruptedException, ExecutionException;

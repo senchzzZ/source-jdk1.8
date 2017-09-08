@@ -131,7 +131,8 @@ public interface Executor {
      * Executes the given command at some time in the future.  The command
      * may execute in a new thread, in a pooled thread, or in the calling
      * thread, at the discretion of the {@code Executor} implementation.
-     *
+     * 在某个时刻执行给到的命令。可能是一个新的线程，在池中的线程，也可能是正在
+     * 调用的线程，取决于具体实现
      * @param command the runnable task
      * @throws RejectedExecutionException if this task cannot be
      * accepted for execution
