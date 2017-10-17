@@ -770,6 +770,9 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
      * Interrupts all threads, even if active. Ignores SecurityExceptions
      * (in which case some threads may remain uninterrupted).
      */
+    /**
+     * 中断所有线程
+     */
     private void interruptWorkers() {
         final ReentrantLock mainLock = this.mainLock;
         mainLock.lock();
@@ -1434,14 +1437,15 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
         final ReentrantLock mainLock = this.mainLock;
         mainLock.lock();
         try {
-            checkShutdownAccess();
-            advanceRunState(SHUTDOWN);
-            interruptIdleWorkers();
+            checkShutdownAccess();//检查关闭权限
+            advanceRunState(SHUTDOWN);//修改运行状态runState
+            interruptIdleWorkers();//中断空闲工作线程
+            //为ScheduledThreadPoolExecutor提供的关闭钩子
             onShutdown(); // hook for ScheduledThreadPoolExecutor
         } finally {
             mainLock.unlock();
         }
-        tryTerminate();
+        tryTerminate();//销毁线程池
     }
 
     /**
@@ -1471,7 +1475,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
         try {
             checkShutdownAccess();
             advanceRunState(STOP);
-            interruptWorkers();
+            interruptWorkers();//中断所有线程
             tasks = drainQueue();
         } finally {
             mainLock.unlock();
@@ -1626,6 +1630,10 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
      *
      * @return {@code true} if a thread was started
      */
+    /**
+     * 启动一个核心线程等待新任务，这将覆盖只在执行新任务时启动核心线程
+     * 的默认策略。如果所有核心线程都已经开启，返回false
+     */
     public boolean prestartCoreThread() {
         return workerCountOf(ctl.get()) < corePoolSize &&
             addWorker(null, true);
@@ -1634,6 +1642,10 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
     /**
      * Same as prestartCoreThread except arranges that at least one
      * thread is started even if corePoolSize is 0.
+     */
+    /**
+     * 和TPE的prestartCoreThread作用一致，不同的是即使corePoolSize为0
+     * 也会安排一个线程启动，
      */
     void ensurePrestart() {
         int wc = workerCountOf(ctl.get());

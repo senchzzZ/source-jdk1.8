@@ -365,6 +365,7 @@ public class FutureTask<V> implements RunnableFuture<V> {
      * stack.  See other classes such as Phaser and SynchronousQueue
      * for more detailed explanation.
      */
+    //等待线程的链表，使用Treiber栈实现
     static final class WaitNode {
         volatile Thread thread;
         volatile WaitNode next;
