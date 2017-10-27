@@ -710,6 +710,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      * for {@code ForkJoinWorkerThread} subclasses that extend base
      * functionality or initialize threads with different contexts.
      */
+    //线程工厂接口，用于创建ForkJoinWorkerThread
     public static interface ForkJoinWorkerThreadFactory {
         /**
          * Returns a new worker thread operating in the given pool.
@@ -725,6 +726,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      * Default ForkJoinWorkerThreadFactory implementation; creates a
      * new ForkJoinWorkerThread.
      */
+    //内部默认线程工厂实现类
     static final class DefaultForkJoinWorkerThreadFactory
         implements ForkJoinWorkerThreadFactory {
         public final ForkJoinWorkerThread newThread(ForkJoinPool pool) {
@@ -737,6 +739,9 @@ public class ForkJoinPool extends AbstractExecutorService {
      * of local joins if they are removed from an interior queue slot
      * in WorkQueue.tryRemoveAndExec. We don't need the proxy to
      * actually do anything beyond having a unique identity.
+     */
+    /**
+     * 内部占位类，用于替换队列中的join的任务
      */
     static final class EmptyTask extends ForkJoinTask<Void> {
         private static final long serialVersionUID = -7721805057305804111L;
@@ -773,6 +778,9 @@ public class ForkJoinPool extends AbstractExecutorService {
      * do not want multiple WorkQueue instances or multiple queue
      * arrays sharing cache lines. The @Contended annotation alerts
      * JVMs to try to keep instances apart.
+     */
+    /**
+     * work-stealing模式队列，使用contended注解避免伪共享
      */
     @sun.misc.Contended
     static final class WorkQueue {
@@ -1266,6 +1274,9 @@ public class ForkJoinPool extends AbstractExecutorService {
      * to paranoically avoid potential initialization circularities
      * as well as to simplify generated code.
      */
+    /**
+     * 公共静态pool
+     */
     static final ForkJoinPool common;
 
     /**
@@ -1274,22 +1285,26 @@ public class ForkJoinPool extends AbstractExecutorService {
      * common.parallelism field to be zero, but in that case still report
      * parallelism as 1 to reflect resulting caller-runs mechanics.
      */
+    //池个数，对应内部common池
     static final int commonParallelism;
 
     /**
      * Limit on spare thread construction in tryCompensate.
      */
+    //备用线程数，在tryCompensate中使用
     private static int commonMaxSpares;
 
     /**
      * Sequence number for creating workerNamePrefix.
      */
+    //创建workerNamePrefix(工作线程名称前缀)时的序号
     private static int poolNumberSequence;
 
     /**
      * Returns the next sequence number. We don't expect this to
      * ever contend, so use simple builtin sync.
      */
+    //返回下一个序号
     private static final synchronized int nextPoolId() {
         return ++poolNumberSequence;
     }
@@ -1304,11 +1319,13 @@ public class ForkJoinPool extends AbstractExecutorService {
      * aggressive shrinkage during most transient stalls (long GCs
      * etc).
      */
+    //线程阻塞等待新的任务的超时值(以纳秒为单位)，默认2秒
     private static final long IDLE_TIMEOUT = 2000L * 1000L * 1000L; // 2sec
 
     /**
      * Tolerance for idle timeouts, to cope with timer undershoots
      */
+    //空闲超时时间，防止timer未命中
     private static final long TIMEOUT_SLOP = 20L * 1000L * 1000L;  // 20ms
 
     /**
@@ -1318,6 +1335,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      * OS thread limits, so allows JVMs to catch misuse/abuse
      * before running out of resources needed to do so.
      */
+    //默认备用线程数
     private static final int DEFAULT_COMMON_MAX_SPARES = 256;
 
     /**
@@ -1332,12 +1350,14 @@ public class ForkJoinPool extends AbstractExecutorService {
      * If/when MWAIT-like intrinsics becomes available, they
      * may allow quieter spinning.
      */
+    //阻塞前自旋等待的次数
     private static final int SPINS  = 0;
 
     /**
      * Increment for seed generators. See class ThreadLocal for
      * explanation.
      */
+    //indexSeed的增量
     private static final int SEED_INCREMENT = 0x9e3779b9;
 
     /*
@@ -1400,6 +1420,7 @@ public class ForkJoinPool extends AbstractExecutorService {
     /**
      * Acquires the runState lock; returns current (locked) runState.
      */
+    //获取runState锁，返回当前runSate
     private int lockRunState() {
         int rs;
         return ((((rs = runState) & RSLOCK) != 0 ||
@@ -1411,6 +1432,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      * Spins and/or blocks until runstate lock is available.  See
      * above for explanation.
      */
+    //自旋或阻塞直到runstate锁可用
     private int awaitRunStateLock() {
         Object lock;
         boolean wasInterrupted = false;
@@ -1459,6 +1481,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      * @param oldRunState a value returned from lockRunState
      * @param newRunState the next value (must have lock bit clear).
      */
+    //释放锁并且设置runSate为给定参数
     private void unlockRunState(int oldRunState, int newRunState) {
         if (!U.compareAndSwapInt(this, RUNSTATE, oldRunState, newRunState)) {
             Object lock = stealCounter;
@@ -1528,6 +1551,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      * @param wt the worker thread
      * @return the worker's queue
      */
+    //ForkJoinWorkerThread构造器的回调函数，用于创建和记录WorkQueue
     final WorkQueue registerWorker(ForkJoinWorkerThread wt) {
         UncaughtExceptionHandler handler;
         wt.setDaemon(true);                           // configure thread
@@ -1574,6 +1598,9 @@ public class ForkJoinPool extends AbstractExecutorService {
      *
      * @param wt the worker thread, or null if construction failed
      * @param ex the exception causing failure, or null if none
+     */
+    /**
+     * 销毁工作线程或创建线程异常时调用。移除数组中工作线程记录，并调整线程数
      */
     final void deregisterWorker(ForkJoinWorkerThread wt, Throwable ex) {
         WorkQueue w = null;
@@ -1626,6 +1653,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      * @param ws the worker array to use to find signallees
      * @param q a WorkQueue --if non-null, don't retry if now empty
      */
+    //如果活跃工作线程数很少，尝试创建或激活一个工作线程
     final void signalWork(WorkQueue[] ws, WorkQueue q) {
         long c; int sp, i; WorkQueue v; Thread p;
         while ((c = ctl) < 0L) {                       // too few active
@@ -1664,6 +1692,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      * @param inc the increment to active count (zero when compensating)
      * @return true if successful
      */
+    //如果队列最顶工作线程闲置，唤醒并释放它
     private boolean tryRelease(long c, WorkQueue v, long inc) {
         int sp = (int)c, vs = (sp + SS_SEQ) & ~INACTIVE; Thread p;
         if (v != null && v.scanState == sp) {          // v is at top of stack
@@ -1683,6 +1712,7 @@ public class ForkJoinPool extends AbstractExecutorService {
     /**
      * Top-level runloop for workers, called by ForkJoinWorkerThread.run.
      */
+    //ForkJoinWorkerThread运行主方法
     final void runWorker(WorkQueue w) {
         w.growArray();                   // allocate queue
         int seed = w.hint;               // initially holds randomization hint
@@ -1711,6 +1741,9 @@ public class ForkJoinPool extends AbstractExecutorService {
      * @param w the worker (via its WorkQueue)
      * @param r a random seed
      * @return a task, or null if none found
+     */
+    /**
+     * 扫描并尝试偷取一个最顶层任务。
      */
     private ForkJoinTask<?> scan(WorkQueue w, int r) {
         WorkQueue[] ws; int m;
@@ -1782,6 +1815,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      * @param r a random seed (for spins)
      * @return false if the worker should terminate
      */
+    //可能阻塞给定工作线程等待另一个任务偷取，如果工作线程需要销毁返回false
     private boolean awaitWork(WorkQueue w, int r) {
         if (w == null || w.qlock < 0)                 // w is terminating
             return false;
@@ -1853,6 +1887,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      * @param maxTasks if non-zero, the maximum number of other tasks to run
      * @return task status on exit
      */
+    //尝试在目标的计算中窃取并运行任务。
     final int helpComplete(WorkQueue w, CountedCompleter<?> task,
                            int maxTasks) {
         WorkQueue[] ws; int s = 0, m;
@@ -1909,6 +1944,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      * @param w caller
      * @param task the task to join
      */
+    //帮助给定偷取线程定位并执行任务
     private void helpStealer(WorkQueue w, ForkJoinTask<?> task) {
         WorkQueue[] ws = workQueues;
         int oldSum = 0, checkSum, m;
@@ -1978,6 +2014,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      *
      * @param w caller
      */
+    //尝试缩减活动线程量，可能释放或创建一个补偿worker来准备阻塞
     private boolean tryCompensate(WorkQueue w) {
         boolean canBlock;
         WorkQueue[] ws; long c; int m, pc, sp;
@@ -2031,6 +2068,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      * @param deadline for timed waits, if nonzero
      * @return task status on exit
      */
+    //帮助偷取线程或阻塞线程直到给定任务已完成或超时
     final int awaitJoin(WorkQueue w, ForkJoinTask<?> task, long deadline) {
         int s = 0;
         if (task != null && w != null) {
@@ -2071,6 +2109,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      * during a scan, else null.  This method must be retried by
      * caller if, by the time it tries to use the queue, it is empty.
      */
+    //获取一个非空的偷窃队列
     private WorkQueue findNonEmptyStealQueue() {
         WorkQueue[] ws; int m;  // one-shot version of scan loop
         int r = ThreadLocalRandom.nextSecondarySeed();
@@ -2098,6 +2137,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      * when tasks cannot be found, we rescan until all others cannot
      * find tasks either.
      */
+    //运行任务直到所有工作线程空闲
     final void helpQuiescePool(WorkQueue w) {
         ForkJoinTask<?> ps = w.currentSteal; // save context
         for (boolean active = true;;) {
@@ -2134,6 +2174,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      *
      * @return a task, if available
      */
+    //根据给定WorkQueue获取并移除一个本地任务或偷取过来的任务
     final ForkJoinTask<?> nextTaskFor(WorkQueue w) {
         for (ForkJoinTask<?> t;;) {
             WorkQueue q; int b;
@@ -2188,6 +2229,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      * threads, that are known to have zero queued tasks, so
      * compensate by a factor of (#idle/#active) threads.
      */
+    //获取剩余的队列任务
     static int getSurplusQueuedTaskCount() {
         Thread t; ForkJoinWorkerThread wt; ForkJoinPool pool; WorkQueue q;
         if (((t = Thread.currentThread()) instanceof ForkJoinWorkerThread)) {
@@ -2214,6 +2256,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      * @param enable if true, enable shutdown when next possible
      * @return true if now terminating or terminated
      */
+    //终止线程池
     private boolean tryTerminate(boolean now, boolean enable) {
         int rs;
         if (this == common)                       // cannot shut down
@@ -2314,6 +2357,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      *
      * @param task the task. Caller must ensure non-null.
      */
+    //外部任务提交
     private void externalSubmit(ForkJoinTask<?> task) {
         int r;                                    // initialize caller's probe
         if ((r = ThreadLocalRandom.getProbe()) == 0) {
@@ -2396,6 +2440,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      *
      * @param task the task. Caller must ensure non-null.
      */
+    //尝试添加给定任务到发送者线程的队列中
     final void externalPush(ForkJoinTask<?> task) {
         WorkQueue[] ws; WorkQueue q; int m;
         int r = ThreadLocalRandom.getProbe();
@@ -2422,6 +2467,7 @@ public class ForkJoinPool extends AbstractExecutorService {
     /**
      * Returns common pool queue for an external thread.
      */
+    //为外部线程返回一个common pool
     static WorkQueue commonSubmitterQueue() {
         ForkJoinPool p = common;
         int r = ThreadLocalRandom.getProbe();
@@ -2436,6 +2482,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      * locks if apparently non-empty, validates upon locking, and
      * adjusts top. Each check can fail but rarely does.
      */
+    //为外部提交者提供tryUnpush功能
     final boolean tryExternalUnpush(ForkJoinTask<?> task) {
         WorkQueue[] ws; WorkQueue w; ForkJoinTask<?>[] a; int m, s;
         int r = ThreadLocalRandom.getProbe();
@@ -2460,6 +2507,7 @@ public class ForkJoinPool extends AbstractExecutorService {
     /**
      * Performs helpComplete for an external submitter.
      */
+    //为外部提交者提供helpComplete功能
     final int externalHelpComplete(CountedCompleter<?> task, int maxTasks) {
         WorkQueue[] ws; int n;
         int r = ThreadLocalRandom.getProbe();
@@ -2609,6 +2657,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      * @throws RejectedExecutionException if the task cannot be
      *         scheduled for execution
      */
+    //执行给定任务
     public <T> T invoke(ForkJoinTask<T> task) {
         if (task == null)
             throw new NullPointerException();
@@ -2624,6 +2673,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      * @throws RejectedExecutionException if the task cannot be
      *         scheduled for execution
      */
+    //异步执行
     public void execute(ForkJoinTask<?> task) {
         if (task == null)
             throw new NullPointerException();
@@ -2836,6 +2886,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      *
      * @return {@code true} if all threads are currently idle
      */
+    //是否所有的工作线程都已经空闲
     public boolean isQuiescent() {
         return (config & SMASK) + (int)(ctl >> AC_SHIFT) <= 0;
     }
@@ -3117,6 +3168,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      *         {@code false} if the timeout elapsed before termination
      * @throws InterruptedException if interrupted while waiting
      */
+    //在对池发送shutdown命令后，阻塞直到所有的任务都完成后再销毁
     public boolean awaitTermination(long timeout, TimeUnit unit)
         throws InterruptedException {
         if (Thread.interrupted())
@@ -3155,6 +3207,10 @@ public class ForkJoinPool extends AbstractExecutorService {
      * @return {@code true} if quiescent; {@code false} if the
      * timeout elapsed.
      */
+    /**如果在当前pool中调用了一个ForkJoinTask操作，等价于ForkJoinTask.helpQuiesce
+     * 否则的话，等待或尝试帮助执行中的任务直到当前pool中所有的工作线程都已经空闲
+     */
+
     public boolean awaitQuiescence(long timeout, TimeUnit unit) {
         long nanos = unit.toNanos(timeout);
         ForkJoinWorkerThread wt;
@@ -3194,6 +3250,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      * Waits and/or attempts to assist performing tasks indefinitely
      * until the {@link #commonPool()} {@link #isQuiescent}.
      */
+    //等待或尝试帮助执行中的任务直到pool中所有的工作线程都已经空闲
     static void quiesceCommonPool() {
         common.awaitQuiescence(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
     }
@@ -3253,6 +3310,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      *   }
      * }}</pre>
      */
+    //为ForkJoinPool中的任务提供扩展管理parallelism的接口
     public static interface ManagedBlocker {
         /**
          * Possibly blocks the current thread, for example waiting for
@@ -3298,6 +3356,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      * @param blocker the blocker task
      * @throws InterruptedException if {@code blocker.block()} did so
      */
+    //运行给定可能会被阻塞的任务
     public static void managedBlock(ManagedBlocker blocker)
         throws InterruptedException {
         ForkJoinPool p;

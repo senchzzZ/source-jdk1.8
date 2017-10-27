@@ -96,6 +96,9 @@ public class ThreadLocal<T> {
      * implicit sequential thread-local IDs into near-optimally spread
      * multiplicative hash values for power-of-two-sized tables.
      */
+    /**连续分配的两个ThreadLocal实例的threadLocalHashCode值的增量
+     * 为了让哈希码能均匀的分布在2的N次方的数组里
+     */
     private static final int HASH_INCREMENT = 0x61c88647;
 
     /**
