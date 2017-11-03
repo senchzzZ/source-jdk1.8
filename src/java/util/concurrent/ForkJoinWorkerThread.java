@@ -153,18 +153,18 @@ public class ForkJoinWorkerThread extends Thread {
         if (workQueue.array == null) { // only run once
             Throwable exception = null;
             try {
-                onStart();
+                onStart();//空方法，可自定义扩展
                 pool.runWorker(workQueue);
             } catch (Throwable ex) {
                 exception = ex;
             } finally {
                 try {
-                    onTermination(exception);
+                    onTermination(exception);//空方法，可自定义扩展
                 } catch (Throwable ex) {
                     if (exception == null)
                         exception = ex;
                 } finally {
-                    pool.deregisterWorker(this, exception);
+                    pool.deregisterWorker(this, exception);//处理异常
                 }
             }
         }

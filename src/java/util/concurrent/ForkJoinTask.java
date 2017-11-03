@@ -282,6 +282,7 @@ public abstract class ForkJoinTask<V> implements Future<V>, Serializable {
      *
      * @return status on exit from this method
      */
+    //ForkJoinTask.doExec
     final int doExec() {
         int s; boolean completed;
         if ((s = status) >= 0) {
@@ -437,6 +438,7 @@ public abstract class ForkJoinTask<V> implements Future<V>, Serializable {
      * any ForkJoinPool will call helpExpungeStaleExceptions when its
      * pool becomes isQuiescent.
      */
+    //错误信息单向链表
     static final class ExceptionNode extends WeakReference<ForkJoinTask<?>> {
         final Throwable ex;
         ExceptionNode next;
@@ -610,6 +612,7 @@ public abstract class ForkJoinTask<V> implements Future<V>, Serializable {
     /**
      * Poll stale refs and remove them. Call only while holding lock.
      */
+    //弹出旧的ExceptionNode引用并移除
     private static void expungeStaleExceptions() {
         for (Object x; (x = exceptionTableRefQueue.poll()) != null;) {
             if (x instanceof ExceptionNode) {
@@ -638,6 +641,7 @@ public abstract class ForkJoinTask<V> implements Future<V>, Serializable {
      * If lock is available, poll stale refs and remove them.
      * Called from ForkJoinPool when pools become quiescent.
      */
+    //如果锁可被获取，弹出旧的refs并移除
     static final void helpExpungeStaleExceptions() {
         final ReentrantLock lock = exceptionTableLock;
         if (lock.tryLock()) {
