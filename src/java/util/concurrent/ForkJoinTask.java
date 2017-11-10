@@ -698,6 +698,7 @@ public abstract class ForkJoinTask<V> implements Future<V>, Serializable {
      *
      * @return {@code this}, to simplify usage
      */
+    //拆分任务
     public final ForkJoinTask<V> fork() {
         Thread t;
         if ((t = Thread.currentThread()) instanceof ForkJoinWorkerThread)
@@ -718,6 +719,7 @@ public abstract class ForkJoinTask<V> implements Future<V>, Serializable {
      *
      * @return the computed result
      */
+    //合并任务
     public final V join() {
         int s;
         if ((s = doJoin() & DONE_MASK) != NORMAL)
@@ -733,6 +735,7 @@ public abstract class ForkJoinTask<V> implements Future<V>, Serializable {
      *
      * @return the computed result
      */
+    //执行任务
     public final V invoke() {
         int s;
         if ((s = doInvoke() & DONE_MASK) != NORMAL)
@@ -757,6 +760,7 @@ public abstract class ForkJoinTask<V> implements Future<V>, Serializable {
      * @param t2 the second task
      * @throws NullPointerException if any task is null
      */
+    //拆分给定任务
     public static void invokeAll(ForkJoinTask<?> t1, ForkJoinTask<?> t2) {
         int s1, s2;
         t2.fork();
@@ -1000,6 +1004,7 @@ public abstract class ForkJoinTask<V> implements Future<V>, Serializable {
      * @throws InterruptedException if the current thread is not a
      * member of a ForkJoinPool and was interrupted while waiting
      */
+    //等待任务执行完成返回结果
     public final V get() throws InterruptedException, ExecutionException {
         int s = (Thread.currentThread() instanceof ForkJoinWorkerThread) ?
             doJoin() : externalInterruptibleAwaitDone();

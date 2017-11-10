@@ -188,6 +188,16 @@ public class ForkJoinPool extends AbstractExecutorService {
      * their main rationale and descriptions are presented here;
      * individual methods and nested classes contain only brief
      * comments about details.
+     * ForkJoinPool和它的嵌套类为一组工作线程提供主要功能和控制：
+     * 非FJ线程任务放在submission queue，工作线程拿到这些任务并拆分为
+     * 多个子任务，队列任务也可能被其他工作线程偷取。工作线程优先处理
+     * 来自自身队列的任务（LIFO或FIFO，参数mode决定），然后以FIFO方式
+     * 随机在其他队列中窃取任务。这个框架开始作为支持使用工作窃取的树
+     * 结构并行的工具。随着时间的推移，它的可伸缩性优势得到扩展和更改，
+     * 以更好地支持更多样化的使用。由于很多内部方法和嵌套类相互关联，
+     * 它们的主要原理和描述都在下面展示；个别方法和嵌套类只包含关于
+     * 细节的简短注释。
+     *
      *
      * WorkQueues
      * ==========
@@ -213,6 +223,12 @@ public class ForkJoinPool extends AbstractExecutorService {
      * numbers of tasks. To accomplish this, we shift the CAS
      * arbitrating pop vs poll (steal) from being on the indices
      * ("base" and "top") to the slots themselves.
+     * 大多数操作都发生在work-stealing队列中(内嵌WorkQueue类)。
+     * 此workQueue支持三种形式的出列操作：push、pop、poll(也叫steal)，
+     * push和pop只能被队列内部持有的线程调用，poll被其他线程调用。
+     * 最大的不同来自于GC，我们一有机会就将队列的获取槽位置空，即使是在
+     * 生成大量任务的程序中，也要保持尽可能小的占用空间。
+     * 为了实现这一点，我们使用CAS解决pop和poll(steal)的线程冲突问题
      *
      * Adding tasks then takes the form of a classic array push(task):
      *    q.array[q.top] = task; ++q.top;
@@ -250,11 +266,23 @@ public class ForkJoinPool extends AbstractExecutorService {
      * non-blockingness.  If an attempted steal fails, a thief always
      * chooses a different random victim target to try next. So, in
      * order for one thief to progress, it suffices for any
-     * in-progress poll or new push on any empty queue to
-     * complete. (This is why we normally use method pollAt and its
+     * in-progress poll or new push on any empty queue to complete.
+     * (This is why we normally use method pollAt and its
      * variants that try once at the apparent base index, else
      * consider alternative actions, rather than method poll, which
      * retries.)
+     * 由于使用了CAS，所以在队列base和top不必使用标志位，它们都是简单的
+     * int整数，可适用于所有循环的基于数组的队列。对索引的更新保证了当
+     * top==base时代表这个队列为空，但是如果在push、pop或poll没有完全
+     * 完成的情况下，可能出现即使base==top但队列为非空的错误情况（
+     * isEmpty方法可以检查 移除最后一个元素操作 部分完成的情况）。所以
+     * ，单独考虑poll操作，它并不是wait-free(无等待算法)。在一个线程
+     * 正在偷取任务时，另外一个线程是无法完成偷取操作的。不过，大体上讲，
+     * 我们确定起码有一定概率保证了非阻塞性。如果一个偷取操作失败，偷取
+     * 线程会选择另外一个随机目标继续尝试。所以，为了使一个偷取线程能够执行，
+     * 它能够满足任何正在执行的对queue的poll或push操作（这就是为什么
+     * 我们通常使用pollAt方法和它的变体，在已知的base索引中先尝试一次，
+     * 然后再考虑可替代的操作，而不使用可以重试的poll方法）
      *
      * This approach also enables support of a user mode in which
      * local task processing is in FIFO, not LIFO order, simply by
@@ -273,6 +301,16 @@ public class ForkJoinPool extends AbstractExecutorService {
      * randomization of sufficient quality is used whenever
      * applicable.  Various Marsaglia XorShifts (some with different
      * shift constants) are inlined at use points.
+     * todo
+     * 这种方法也支持 以FIFO方式处理本地任务 这种模式，但不适用LIFO模式，
+     * 只需要使用poll而非pop。两种模式都不考虑共用性、加载、缓存
+     * 地址等等，所以很少能在给定的机器上提供最好的性能，但通过对这些因素
+     * 进行平均，可以很好地提供良好的吞吐量。更进一步来讲，即使我们尝试
+     * 使用这些信息，也没有能利用它的基础。例如，一些任务列表使用了缓存
+     * 共用，但其他任务列表会受到它的影响。另外，即使它提供了扫描功能，
+     * 长期吞吐量通常最好使用随机选择，而不是直接选择策略，因此，只要合适
+     * 就会使用更加廉价的随机选择策略。很多Marsaglia XorShifts(一种随机算法)
+     * (有些带有不同的偏移量)在使用上都是有联系的。
      *
      * WorkQueues are also used in a similar way for tasks submitted
      * to the pool. We cannot mix these tasks in the same queues used
@@ -317,6 +355,9 @@ public class ForkJoinPool extends AbstractExecutorService {
      * far in excess of normal operating range) to allow ids, counts,
      * and their negations (used for thresholding) to fit into 16bit
      * subfields.
+     * ctl定义为一个64位的原子类型字段，用来标识对工作线程进行添加、灭活
+     * 、重新激活和对队列出列、入列操作。使用了16位的parallelism（并行数）
+     * 填充。
      *
      * Field "runState" holds lockable state bits (STARTED, STOP, etc)
      * also protecting updates to the workQueues array.  When used as
@@ -333,10 +374,14 @@ public class ForkJoinPool extends AbstractExecutorService {
      * internal Object to use as a monitor, the "stealCounter" (an
      * AtomicLong) is used when available (it too must be lazily
      * initialized; see externalSubmit).
+     * runState表示当前池的锁定的状态，同样也作为锁保护workQueues数组的更新。
      *
      * Usages of "runState" vs "ctl" interact in only one case:
      * deciding to add a worker thread (see tryAddWorker), in which
      * case the ctl CAS is performed while the lock is held.
+     * "runState" 和 "ctl"的用法只有在一种情况中会相互影响：
+     * 当添加一个新的工作线程时（tryAddWorker），只有在获得锁时
+     * 才可以对ctl进行CAS操作。
      *
      * Recording WorkQueues.  WorkQueues are recorded in the
      * "workQueues" array. The array is created upon first use (see
@@ -352,6 +397,12 @@ public class ForkJoinPool extends AbstractExecutorService {
      * a maximum of 64 slots, to limit growth even if array needs to
      * expand to add more workers. Grouping them together in this way
      * simplifies and speeds up task scanning.
+     * 记录WorkQueues。WorkQueues在内部的“workQueues”数组中记录。这个数组
+     * 在第一次使用时(见externalSubmit)创建，如果必要的话对其进行扩容。数组
+     * 的更新操作受runState锁的保护，但可以并发读取。为了简化基于索引的操作，
+     * 数组大小一定为2的幂，并且可存储null值。工作任务存放在奇数索引。共享
+     * 任务(submission/external task)存放在偶数索引，最多64个槽位，以这种
+     * 方式将它们组合在一起可以简化和加速任务扫描
      *
      * All worker thread creation is on-demand, triggered by task
      * submissions, replacement of terminated workers, and/or
@@ -363,6 +414,12 @@ public class ForkJoinPool extends AbstractExecutorService {
      * constructions here). In essence, the workQueues array serves as
      * a weak reference mechanism. Thus for example the stack top
      * subfield of ctl stores indices, not references.
+     * 所有工作线程都是按照需求创建，被submission任务触发，然后被终止工作
+     * 线程替代，或者用阻塞线程补偿。但是，所有其他辅助代码都是建立在拥有
+     * 其他策略的工作线程基础上的。为了确保我们不保留那些可以防止GC的work
+     * 引用，所有对workQueues的访问都通过索引进入workQueues数组(所以
+     * ForkJoinPool的代码结构看上去很吃力)。实际上，工作队列数组充当弱引
+     * 用机制，例如ctl存储索引的栈顶子字段而不是引用。
      *
      * Queuing Idle Workers. Unlike HPC work-stealing frameworks, we
      * cannot let workers spin indefinitely scanning for tasks when
@@ -374,6 +431,12 @@ public class ForkJoinPool extends AbstractExecutorService {
      * performance, which is compounded at program start-up by JIT
      * compilation and allocation. So we streamline this as much as
      * possible.
+     * 闲置工作线程排队：跟高性能计算(HPC)work-stealing框架不同，当没有
+     * 立刻扫描到任务时，我们不能让工作线程无限制的自旋扫描，除非有任务可用
+     * 否则不能开启/重启工作线程。另一方面，当新任务提交或生成时，我们必须
+     * 快速地将它们推进行动。在许多情况下，通过增加时间来激活工作线程是限制
+     * 整体性能的主要因素，并且JIT编译和分配使程序启动更加复杂，所以我们应
+     * 尽可能地简化它。
      *
      * The "ctl" field atomically maintains active and total worker
      * counts as well as a queue to place waiting threads so they can
@@ -391,6 +454,15 @@ public class ForkJoinPool extends AbstractExecutorService {
      * worker: its index and status, plus a version counter that, in
      * addition to the count subfields (also serving as version
      * stamps) provide protection against Treiber stack ABA effects.
+     * ctl利用原子性维护了活跃线程数、工作线程总数，还有一个放置等待线程
+     * 的队列。活跃线程数同样也担任静止指标的角色，当工作线程确认已经没有
+     * 任务可以执行时，就递减这个值。这个等待队列其实也是一个Treiber栈，
+     * 栈可以很理想的顺序存储最近使用的活跃线程。这改善了线程执行和任务
+     * 定位，只要任务在栈的顶端，在发生争用时也可以很好的释放工作
+     * 线程。当找不到worker时，我们使用park/unpark来操作已经被放到空闲
+     * worker栈的线程（使用ctl低32位表示）。顶部栈状态持有worker的
+     * “scanState”的值：它的索引和状态，加上一个scanState值，再加上子域
+     * 数（同样也可作为scanState）提供对Treiber栈ABA问题的保护
      *
      * Field scanState is used by both workers and the pool to manage
      * and track whether a worker is INACTIVE (possibly blocked
@@ -403,6 +475,14 @@ public class ForkJoinPool extends AbstractExecutorService {
      * scanState must hold its pool index. So we place the index there
      * upon initialization (see registerWorker) and otherwise keep it
      * there or restore it when necessary.
+     * worker和pool都使用scanState来管理和追踪worker是否INACTIVE（可能
+     * 阻塞等待唤醒），也可以为task是否为SCANNING提供相同功能（当两者都
+     * 不是时，它就是正在运行的任务）。当一个worker处于inactivate状态，
+     * 它的scanState被设置，被禁止执行任务，即使如此它也必须扫描一次以
+     * 避免队列争用。注意，scanState的更新在队列CAS释放之后（会有延迟），
+     * 因此使用需要谨慎。当在排队时，scanState的低16位必须持有它的池的索引
+     * 因此，我们在初始化时将索引放置在那里(参见registerWorker)，并将其
+     * 一直保存在那里或在必要时恢复它
      *
      * Memory ordering.  See "Correct and Efficient Work-Stealing for
      * Weak Memory Models" by Le, Pop, Cohen, and Nardelli, PPoPP 2013
@@ -1839,12 +1919,12 @@ public class ForkJoinPool extends AbstractExecutorService {
      * @param r a random seed (for spins)
      * @return false if the worker should terminate
      */
-    //可能阻塞给定任务队列等待另一个任务偷取，如果工作线程需要销毁返回false
+    //可能阻塞给定任务队列等待另一个任务的偷取，如果工作线程需要销毁返回false
     private boolean awaitWork(WorkQueue w, int r) {
         if (w == null || w.qlock < 0)                 // w is terminating
             return false;
         for (int pred = w.stackPred, spins = SPINS, ss;;) {
-            if ((ss = w.scanState) >= 0)
+            if ((ss = w.scanState) >= 0)//正在扫描，跳出循环
                 break;
             else if (spins > 0) {
                 r ^= r << 6; r ^= r >>> 21; r ^= r << 7;
@@ -1862,7 +1942,7 @@ public class ForkJoinPool extends AbstractExecutorService {
             else if (!Thread.interrupted()) {
                 long c, prevctl, parkTime, deadline;
                 int ac = (int)((c = ctl) >> AC_SHIFT) + (config & SMASK);
-                if ((ac <= 0 && tryTerminate(false, false)) ||
+                if ((ac <= 0 && tryTerminate(false, false)) || //无active线程，尝试终止
                     (runState & STOP) != 0)           // pool terminating
                     return false;
                 if (ac <= 0 && ss == (int)c) {        // is last waiter
@@ -1879,7 +1959,7 @@ public class ForkJoinPool extends AbstractExecutorService {
                 U.putObject(wt, PARKBLOCKER, this);   // emulate LockSupport
                 w.parker = wt;
                 if (w.scanState < 0 && ctl == c)      // recheck before park
-                    U.park(false, parkTime);
+                    U.park(false, parkTime);//阻塞当前线程
                 U.putOrderedObject(w, QPARKER, null);
                 U.putObject(wt, PARKBLOCKER, null);
                 if (w.scanState >= 0)
