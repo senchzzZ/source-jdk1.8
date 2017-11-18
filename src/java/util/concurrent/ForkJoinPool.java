@@ -757,26 +757,28 @@ public class ForkJoinPool extends AbstractExecutorService {
      * to find work using checksums and fall back to suspending the
      * worker and if necessary replacing it with another.
      * helpStealer使用了一种"linear helping"的算法。每个工作线程都记录了最近一个从其他工作线程（或submission）偷取过来的任务（存放在currentSteal里），
-     * 同样也记录了当前被join的任务（存放在currentJoin里）。helpStealer方法使用这些标记去尝试找到一个worker并帮助执行
-     * （也就是说，从偷取任务中拿到任务并执行），这样就可以加速join任务的执行。
-     * todo 因此，joiner执行一个任务，该任务将在它自己的队列上完成，而不是被窃取。
+     * 同样也记录了当前被join的任务（存放在currentJoin里）。helpStealer方法使用这些标记去尝试找到偷取者并帮助它执行任务，
+     * （也就是说，从偷取任务中拿到任务并执行，“偷取者偷我的任务执行，我去偷偷取者的任务执行”），这样就可以加速任务的执行。
      * 关于这个算法可以查看Wagner & Calder的论文Leapfrogging(跨越式)：一种实现高效Future模式的便携式技巧。
      * 不过还是有些许差异：
-     * (1)从worker到steal之间我们只保存依赖关系，而不是记录每个任务。
-     * 有时可能需要对workQueues的线性扫描来定位偷取者，但是一般不需要，因为偷取者在定位任务时会使用hint记录索引。
+     * (1)从worker到steal之间我们只保存依赖关系，而不是记录每个steal任务。
+     * 有时可能需要对workQueues进行线性扫描来定位偷取者，但是一般不需要，因为偷取者在偷取任务时会把他的索引存放在在hint里。
      * 一个worker可能进行了多个偷取操作，但只记录了其中一个偷取者的索引(通常是最近的那个)，
-     * 为了节省每个任务开销，hint在需要时才会记录
+     * 为了节省开销，hint在需要时才会记录
      * (2)它是相对“浅层的”，忽略了嵌套和可能发生的循环相互偷取。
      * (3)currentJoin字段只有在join的时候被更新，这意味着我们在执行生命周期比较长的任务时会丢失链接，导致GC停转(在这种情况下利用阻塞通常是一个好的方案)。
-     * (4)我们使用checksum限制企图查找work的数量，然后把工作线程回退到挂起状态，必要时使用其他工作线程替换它，
+     * (4)我们使用checksum限制查找被帮助执行的任务的次数，然后回到挂起的工作线程，必要时使用其他工作线程替换它。
+     *
      *
      *
      * Helping actions for CountedCompleters do not require tracking
-     * currentJoins: Method helpComplete takes and executes any task
+     * currentJoins: Method helpcomplete takes and executes any task
      * with the same root as the task being waited on (preferring
      * local pops to non-local polls). However, this still entails
      * some traversal of completer chains, so is less efficient than
      * using CountedCompleters without explicit joins.
+     * CountedCompleter的帮助动作不需要追踪currentJoin：helpComplete方法获取并执行在同一个节点下的所有任务
+     * 方法A以与正在等待的任务相同的根执行任何任务
      *
      * Compensation does not aim to keep exactly the target
      * parallelism number of unblocked threads running at any given
@@ -2141,7 +2143,10 @@ public class ForkJoinPool extends AbstractExecutorService {
      * @param maxTasks if non-zero, the maximum number of other tasks to run
      * @return task status on exit
      */
-    //尝试在目标的计算中窃取并运行任务。
+    /*
+     * 尝试在目标的计算中窃取并运行任务。使用更高级的算法，限制了需要帮助的任务必须是给定任务的子任务：
+     * 从工作线程自己的队列中取出和运行符合条件的任务(通过方法popCC)
+     */
     final int helpComplete(WorkQueue w, CountedCompleter<?> task,
                            int maxTasks) {
         WorkQueue[] ws;
@@ -2200,7 +2205,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      * @param w    caller
      * @param task the task to join
      */
-    //帮助 给定任务的偷取者 定位并执行任务
+    //帮助 给定任务的偷取者 定位并执行任务（偷取者偷我的任务，我去偷偷取者的任务）
     private void helpStealer(WorkQueue w, ForkJoinTask<?> task) {
         WorkQueue[] ws = workQueues;
         int oldSum = 0, checkSum, m;
@@ -2362,7 +2367,7 @@ public class ForkJoinPool extends AbstractExecutorService {
                     ms = 1L;
 
                 if (tryCompensate(w)) {//执行补偿操作
-                    task.internalWait(ms);//补偿执行成功，阻塞任务
+                    task.internalWait(ms);//补偿执行成功，任务等待指定时间
                     U.getAndAddLong(this, CTL, AC_UNIT);//还原活跃线程数
                 }
             }
