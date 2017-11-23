@@ -696,7 +696,11 @@ public abstract class ForkJoinTask<V> implements Future<V>, Serializable {
      *
      * @return {@code this}, to simplify usage
      */
-    //拆分任务
+    /*
+     * 在当前任务所在的池中，安排异步执行该任务。
+     * 将一个任务fork多次是一个用法错误，除非它已经完成并且被重新初始化。
+     * 随后对该任务状态的修改或它所操作的任何数据，对其他线程来说不一定是始终保持一致的，除非调用了join或其相关方法。
+     */
     public final ForkJoinTask<V> fork() {
         Thread t;
         if ((t = Thread.currentThread()) instanceof ForkJoinWorkerThread)
@@ -717,7 +721,9 @@ public abstract class ForkJoinTask<V> implements Future<V>, Serializable {
      *
      * @return the computed result
      */
-    //合并任务
+    /*
+     * 完成后返回计算结果
+     */
     public final V join() {
         int s;
         if ((s = doJoin() & DONE_MASK) != NORMAL)
