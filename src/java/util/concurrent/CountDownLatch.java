@@ -158,6 +158,7 @@ public class CountDownLatch extends AbstractQueuedSynchronizer {
      * Synchronization control For CountDownLatch.
      * Uses AQS state to represent count.
      */
+    //同步控制类，继承自AQS
     private static final class Sync extends AbstractQueuedSynchronizer {
         private static final long serialVersionUID = 4982264981922014374L;
 

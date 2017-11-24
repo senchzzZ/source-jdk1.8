@@ -58,6 +58,11 @@ import java.util.concurrent.locks.LockSupport;
  * bookkeeping, so tasks cannot query whether they are registered.
  * (However, you can introduce such bookkeeping by subclassing this
  * class.)
+ * 注册：跟其他barrier不同，在phaser上注册的parties会随着时间的变化而变化。
+ * 任务可以随时注册(使用方法register,bulkRegister注册，或者由构造器确定初始parties)，
+ * 并且在任何抵达点可以随意地撤销注册(方法arriveAndDeregister)。
+ * 就像大多数基本的同步结构一样，注册和撤销只影响内部count；它们不会创建更深的内部记录，
+ * 所以任务不能查询他们是否已经注册。(不过，可以通过继承来实现类似的记录)
  *
  * <p><b>Synchronization.</b> Like a {@code CyclicBarrier}, a {@code
  * Phaser} may be repeatedly awaited.  Method {@link
@@ -70,6 +75,9 @@ import java.util.concurrent.locks.LockSupport;
  * control of actions upon arrival at a phaser and upon awaiting
  * others, via two kinds of methods that may be invoked by any
  * registered party:
+ * 同步机制：和CyclicBarrier一样，Phaser也可以重复await。方法arriveAndAwaitAdvance的效果类似CyclicBarrier.await。
+ * phaser的每个generation都有一个相关的phase number，初始值为0，当所有注册的任务都到达phaser时累加。
+ * 到达最大值(Integer.MAX_VALUE)之后清零。使用phase number可以独立控制 到达phaser 和 等待其他线程 的动作。
  *
  * <ul>
  *
@@ -86,6 +94,11 @@ import java.util.concurrent.locks.LockSupport;
  *       flexible than, providing a barrier action to a {@code
  *       CyclicBarrier}.
  *
+ *       Arrival：arrive和arriveAndDeregister方法记录到达状态。这些方法不会阻塞，但是会返回一个相关的arrival phase number；
+ *       也就是说，phase number用来确定到达状态。当最后一个注册任务到达时，可以执行一个可选的函数，
+ *       这种函数通过重写onAdvance方法实现，通常可以用来控制终止状态。
+ *       重写此方法类似于为CyclicBarrier提供一个barrier，但比它更灵活。
+ *
  *   <li> <b>Waiting.</b> Method {@link #awaitAdvance} requires an
  *       argument indicating an arrival phase number, and returns when
  *       the phaser advances to (or is already at) a different phase.
@@ -100,6 +113,10 @@ import java.util.concurrent.locks.LockSupport;
  *       also be used by tasks executing in a {@link ForkJoinPool},
  *       which will ensure sufficient parallelism to execute tasks
  *       when others are blocked waiting for a phase to advance.
+ *       todo Waiting：awaitAdvance方法需要一个表示arrival phase number的参数，并且在phaser前进到不同phase时返回。
+ *       即使等待线程已经被中断，awaitAdvance方法也会一直等待。中断状态和超时时间同样可用，
+ *       但是当任务等待中断或超时后未改变phaser的状态时会遭遇异常。
+ *
  *
  * </ul>
  *
@@ -378,6 +395,7 @@ public class Phaser {
      *               ONE_ARRIVAL for arrive,
      *               ONE_DEREGISTER for arriveAndDeregister
      */
+    //手动减少未到达数
     private int doArrive(int adjust) {
         final Phaser root = this.root;
         for (;;) {
@@ -630,6 +648,7 @@ public class Phaser {
      * @throws IllegalStateException if not terminated and the number
      * of unarrived parties would become negative
      */
+    //到达phaser，不等待其他任务到达。返回arrival phase number
     public int arrive() {
         return doArrive(ONE_ARRIVAL);
     }
@@ -720,6 +739,7 @@ public class Phaser {
      * negative, or the (negative) {@linkplain #getPhase() current phase}
      * if terminated
      */
+    //等待给定phase数，返回下一个 arrival phase number
     public int awaitAdvance(int phase) {
         final Phaser root = this.root;
         long s = (root == this) ? state : reconcileState();

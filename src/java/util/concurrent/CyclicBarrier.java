@@ -44,6 +44,9 @@ import java.util.concurrent.locks.ReentrantLock;
  * must occasionally wait for each other. The barrier is called
  * <em>cyclic</em> because it can be re-used after the waiting threads
  * are released.
+ * CyclicBarrier是一个同步辅助类，允许一组线程互相等待，直到到达某个公共屏障点 (common barrier point)。
+ * 如果一个程序中有固定的线程数，并且线程之间需要相互等待，这时候CyclicBarrier是一个很好的选择。
+ * 之所以叫它cyclic，是因为在释放等待线程之后，它可以被重用。
  *
  * <p>A {@code CyclicBarrier} supports an optional {@link Runnable} command
  * that is run once per barrier point, after the last thread in the party
@@ -148,6 +151,12 @@ public abstract class CyclicBarrier{
      * There need not be an active generation if there has been a break
      * but no subsequent reset.
      */
+    /**
+     * 每个barrier都表示为一个generation实例。当barrier触发trip条件或重置时generation随之改变。
+     * 使用barrier时有很多generation与线程关联-由于不确定性的方式，锁可能分配给等待的线程。
+     * 但是在同一时间只有一个是活跃的generation(通过count变量确定)，并且其余的要么被销毁，要么被trip条件等待。
+     * 如果有一个中断，但没有随后的重置，就不需要有活跃的generation。
+     */
     private static class Generation {
         boolean broken = false;
     }
@@ -159,6 +168,7 @@ public abstract class CyclicBarrier{
     /** The number of parties */
     private final int parties;
     /* The command to run when tripped */
+    //所有线程到达barrier，运行barrierCommand
     private final Runnable barrierCommand;
     /** The current generation */
     private Generation generation = new Generation();
@@ -168,12 +178,14 @@ public abstract class CyclicBarrier{
      * on each generation.  It is reset to parties on each new
      * generation or when broken.
      */
+    //等待parties数，count=0 -> tripped
     private int count;
 
     /**
      * Updates state on barrier trip and wakes up everyone.
      * Called only while holding lock.
      */
+    //更新barrier状态并唤醒所有线程
     private void nextGeneration() {
         // signal completion of last generation
         trip.signalAll();
@@ -186,6 +198,7 @@ public abstract class CyclicBarrier{
      * Sets current barrier generation as broken and wakes up everyone.
      * Called only while holding lock.
      */
+    //销毁当前barrier的generation，并唤醒所有线程
     private void breakBarrier() {
         generation.broken = true;
         count = parties;
@@ -201,13 +214,14 @@ public abstract class CyclicBarrier{
         final ReentrantLock lock = this.lock;
         lock.lock();
         try {
+            //当前generation
             final Generation g = generation;
 
             if (g.broken)
                 throw new BrokenBarrierException();
 
             if (Thread.interrupted()) {
-                breakBarrier();
+                breakBarrier();//线程被中断，终止Barrier，唤醒所有等待线程
                 throw new InterruptedException();
             }
 
@@ -217,8 +231,9 @@ public abstract class CyclicBarrier{
                 try {
                     final Runnable command = barrierCommand;
                     if (command != null)
-                        command.run();
+                        command.run();//如果有barrierCommand，在所有parties到达之后运行它
                     ranAction = true;
+                    //更新barrier状态并唤醒所有线程
                     nextGeneration();
                     return 0;
                 } finally {
@@ -228,6 +243,7 @@ public abstract class CyclicBarrier{
             }
 
             // loop until tripped, broken, interrupted, or timed out
+            //自旋等待 所有parties到达 | generation被销毁 | 线程中断 | 超时
             for (;;) {
                 try {
                     if (!timed)
@@ -253,7 +269,7 @@ public abstract class CyclicBarrier{
                     return index;
 
                 if (timed && nanos <= 0L) {
-                    breakBarrier();
+                    breakBarrier();//超时，销毁当前barrier
                     throw new TimeoutException();
                 }
             }
