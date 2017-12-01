@@ -152,7 +152,7 @@ public class ReentrantLock extends AbstractQueuedSynchronizer implements Lock, j
             boolean free = false;
             if (c == 0) {
                 free = true;
-                setExclusiveOwnerThread(null);
+                setExclusiveOwnerThread(null);//设置独占锁持有线程为null
             }
             setState(c);
             return free;
