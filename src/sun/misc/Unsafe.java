@@ -151,6 +151,7 @@ public final class Unsafe {
      * @throws RuntimeException No defined exceptions are thrown, not even
      *         {@link NullPointerException}
      */
+    //获取对象o中给定偏移地址(offset)的值。以下相关get方法作用相同
     public native int getInt(Object o, long offset);
 
     /**
@@ -173,6 +174,7 @@ public final class Unsafe {
      * @throws RuntimeException No defined exceptions are thrown, not even
      *         {@link NullPointerException}
      */
+    //在对象o的给定偏移地址存储数值x。以下set方法作用相同
     public native void putInt(Object o, long offset, int x);
 
     /**
@@ -397,6 +399,7 @@ public final class Unsafe {
      *
      * @see #allocateMemory
      */
+    //从给定内存地址获取一个byte。下同
     public native byte    getByte(long address);
 
     /**
@@ -406,6 +409,7 @@ public final class Unsafe {
      *
      * @see #getByte(long)
      */
+    //在给定内存地址放置一个x。下同
     public native void    putByte(long address, byte x);
 
     /** @see #getByte(long) */
@@ -447,6 +451,7 @@ public final class Unsafe {
      *
      * @see #allocateMemory
      */
+    //获取给定内存地址的一个本地指针
     public native long getAddress(long address);
 
     /**
@@ -459,6 +464,7 @@ public final class Unsafe {
      *
      * @see #getAddress(long)
      */
+    //在给定的内存地址处存放一个本地指针x
     public native void putAddress(long address, long x);
 
     /// wrappers for malloc, realloc, free:
@@ -478,6 +484,9 @@ public final class Unsafe {
      * @see #getByte(long)
      * @see #putByte(long, byte)
      */
+    //在本地内存分配一块指定大小的新内存，内存的内容未初始化;它们通常被当做垃圾回收。
+    //返回的本地指针永远不会为零，并将对所有值类型进行对齐。
+    // 使用freeMemory来释放这块内存，或者使用reallocateMemory来重新分配大小
     public native long allocateMemory(long bytes);
 
     /**
@@ -497,6 +506,7 @@ public final class Unsafe {
      *
      * @see #allocateMemory
      */
+    //重新分配给定内存地址的本地内存
     public native long reallocateMemory(long address, long bytes);
 
     /**
@@ -516,6 +526,9 @@ public final class Unsafe {
      *
      * @since 1.7
      */
+    //将给定内存块中的所有大小设置为固定值（通常是0）。
+    //该方法通过两个参数确定内存块的地址，也就是说提供了一个double-register地址模型(指定对象，指定offset)。
+    //当给定对象o为null，那么给定offset就是内存的base地址。
     public native void setMemory(Object o, long offset, long bytes, byte value);
 
     /**
@@ -546,6 +559,7 @@ public final class Unsafe {
      *
      * @since 1.7
      */
+    //复制一块内存，double-register模型
     public native void copyMemory(Object srcBase, long srcOffset,
                                   Object destBase, long destOffset,
                                   long bytes);
@@ -556,6 +570,7 @@ public final class Unsafe {
      *
      * Equivalent to <code>copyMemory(null, srcAddress, null, destAddress, bytes)</code>.
      */
+    //复制一块内存，single-register模型
     public void copyMemory(long srcAddress, long destAddress, long bytes) {
         copyMemory(null, srcAddress, null, destAddress, bytes);
     }
@@ -567,6 +582,7 @@ public final class Unsafe {
      *
      * @see #allocateMemory
      */
+    //释放给定地址的内存
     public native void freeMemory(long address);
 
     /// random queries
@@ -648,6 +664,7 @@ public final class Unsafe {
      * must preserve all bits of static field offsets.
      * @see #getInt(Object, long)
      */
+    //获取给定类的偏移地址
     public native long staticFieldOffset(Field f);
 
     /**
@@ -706,6 +723,7 @@ public final class Unsafe {
      * @see #getInt(Object, long)
      * @see #putInt(Object, long, int)
      */
+    //获取给定数组的第一个元素的偏移地址
     public native int arrayBaseOffset(Class<?> arrayClass);
 
     /** The value of {@code arrayBaseOffset(boolean[].class)} */
@@ -755,6 +773,7 @@ public final class Unsafe {
      * @see #getInt(Object, long)
      * @see #putInt(Object, long, int)
      */
+    //获取给定数组的元素增量地址，也就是说每个元素的占位数
     public native int arrayIndexScale(Class<?> arrayClass);
 
     /** The value of {@code arrayIndexScale(boolean[].class)} */
@@ -817,6 +836,7 @@ public final class Unsafe {
      * Tell the VM to define a class, without security checks.  By default, the
      * class loader and protection domain come from the caller's class.
      */
+    //告诉虚拟机去定义一个类。默认情况下，类加载器和保护域都来自这个方法
     public native Class<?> defineClass(String name, byte[] b, int off, int len,
                                        ClassLoader loader,
                                        ProtectionDomain protectionDomain);
@@ -870,6 +890,7 @@ public final class Unsafe {
      * holding <tt>expected</tt>.
      * @return <tt>true</tt> if successful
      */
+    //大名鼎鼎的CAS
     public final native boolean compareAndSwapObject(Object o, long offset,
                                                      Object expected,
                                                      Object x);
@@ -896,6 +917,7 @@ public final class Unsafe {
      * Fetches a reference value from a given Java variable, with volatile
      * load semantics. Otherwise identical to {@link #getObject(Object, long)}
      */
+    //获取对象o的给定偏移地址的引用值（volatile方式）
     public native Object getObjectVolatile(Object o, long offset);
 
     /**
@@ -959,6 +981,9 @@ public final class Unsafe {
      * underlying field is a Java volatile (or if an array cell, one
      * that is otherwise only accessed using volatile accesses).
      */
+    //用于lazySet，适用于低延迟代码。实现非堵塞写入，避免指令重排序，这样它使用快速的存储-存储(store-store) barrier,
+    // 而不是较慢的存储-加载(store-load) barrier, 后者总是用在volatile的写操作上，这种性能提升是有代价的，虽然便宜，
+    // 也就是写后结果并不会被其他线程看到，甚至是自己的线程，通常是几纳秒后被其他线程看到，这个时间比较短，所以代价可以忍受。
     public native void    putOrderedObject(Object o, long offset, Object x);
 
     /** Ordered/Lazy version of {@link #putIntVolatile(Object, long, int)}  */
@@ -979,6 +1004,7 @@ public final class Unsafe {
      * @param thread the thread to unpark.
      *
      */
+    //解除给定线程的阻塞
     public native void unpark(Object thread);
 
     /**
@@ -992,6 +1018,7 @@ public final class Unsafe {
      * because <tt>unpark</tt> is, so it would be strange to place it
      * elsewhere.
      */
+    //阻塞当前线程
     public native void park(boolean isAbsolute, long time);
 
     /**
@@ -1025,6 +1052,7 @@ public final class Unsafe {
      * @return the previous value
      * @since 1.8
      */
+    //获取并加上给定delta，返回加之前的值
     public final int getAndAddInt(Object o, long offset, int delta) {
         int v;
         do {
@@ -1063,6 +1091,7 @@ public final class Unsafe {
      * @return the previous value
      * @since 1.8
      */
+    //为给定偏移地址设置一个新的值，返回设置之前的值
     public final int getAndSetInt(Object o, long offset, int newValue) {
         int v;
         do {
@@ -1115,6 +1144,7 @@ public final class Unsafe {
      * with loads or stores after the fence.
      * @since 1.8
      */
+    //在该方法之前的所有读操作，一定在load屏障之前执行完成
     public native void loadFence();
 
     /**
@@ -1122,6 +1152,7 @@ public final class Unsafe {
      * with loads or stores after the fence.
      * @since 1.8
      */
+    //在该方法之前的所有写操作，一定在store屏障之前执行完成
     public native void storeFence();
 
     /**
@@ -1129,6 +1160,7 @@ public final class Unsafe {
      * with loads or stores after the fence.
      * @since 1.8
      */
+    //在该方法之前的所有读写操作，一定在full屏障之前执行完成，这个内存屏障相当于上面两个的合体功能
     public native void fullFence();
 
     /**
