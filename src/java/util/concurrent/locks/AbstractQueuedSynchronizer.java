@@ -1232,7 +1232,7 @@ public abstract class AbstractQueuedSynchronizer
      *        {@link #tryAcquire} but is otherwise uninterpreted and
      *        can represent anything you like.
      */
-    /**独占锁获取资源*/
+    /**独占模式获取资源*/
     public final void acquire(int arg) {
         if (!tryAcquire(arg) &&
             acquireQueued(addWaiter(Node.EXCLUSIVE), arg))//获取许可失败，入列等待
