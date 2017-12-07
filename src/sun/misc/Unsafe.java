@@ -857,21 +857,25 @@ public final class Unsafe {
      * @params data      bytes of a class file
      * @params cpPatches where non-null entries exist, they replace corresponding CP entries in data
      */
+    //定义匿名内部类
     public native Class<?> defineAnonymousClass(Class<?> hostClass, byte[] data, Object[] cpPatches);
 
 
     /** Allocate an instance but do not run any constructor.
         Initializes the class if it has not yet been. */
-    public native Object allocateInstance(Class<?> cls)
-        throws InstantiationException;
+    //定位一个实例，但不运行构造函数
+    public native Object allocateInstance(Class<?> cls) throws InstantiationException;
 
+ ///--------------------锁指令（synchronized）-------------------------------------
     /** Lock the object.  It must get unlocked via {@link #monitorExit}. */
+    //对象加锁
     public native void monitorEnter(Object o);
 
     /**
      * Unlock the object.  It must have been locked via {@link
      * #monitorEnter}.
      */
+    //对象解锁
     public native void monitorExit(Object o);
 
     /**
@@ -879,6 +883,7 @@ public final class Unsafe {
      * whether the lock succeeded.  If it did, the object must be
      * unlocked via {@link #monitorExit}.
      */
+    //尝试加锁
     public native boolean tryMonitorEnter(Object o);
 
     /** Throw the exception without telling the verifier. */
@@ -890,7 +895,7 @@ public final class Unsafe {
      * holding <tt>expected</tt>.
      * @return <tt>true</tt> if successful
      */
-    //大名鼎鼎的CAS
+    //CAS
     public final native boolean compareAndSwapObject(Object o, long offset,
                                                      Object expected,
                                                      Object x);

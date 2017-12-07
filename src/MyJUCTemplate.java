@@ -11,6 +11,7 @@ import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.IntUnaryOperator;
 
 /**
  * Created by zhaoshengqi on 2017/7/24.
@@ -23,13 +24,13 @@ public class MyJUCTemplate {
 
         // setup to use Unsafe.compareAndSwapInt for updates
         private static final Unsafe unsafe = Unsafe.getUnsafe();
-        //表示变量值在内存中的偏移地址
+        //value的偏移地址
         private static final long valueOffset;
 
         static {
             try {
                 valueOffset = unsafe.objectFieldOffset
-                        (java.util.concurrent.atomic.AtomicInteger.class.getDeclaredField("value"));
+                        (AtomicInteger.class.getDeclaredField("value"));
             } catch (Exception ex) {
                 throw new Error(ex);
             }
@@ -37,23 +38,20 @@ public class MyJUCTemplate {
 
         private volatile int value;
 
-        /**
-         * Creates a new AtomicInteger with the given initial value.
-         *
-         * @param initialValue the initial value
-         */
         public AtomicInteger(int initialValue) {
             value = initialValue;
         }
 
-        /**
-         * Creates a new AtomicInteger with initial value {@code 0}.
-         */
-        public AtomicInteger() {
+        public final int getAndUpdate(IntUnaryOperator updateFunction) {
+            int prev, next;
+            do {
+                prev = get();
+                next = updateFunction.applyAsInt(prev);
+            } while (!compareAndSet(prev, next));
+            return prev;
         }
-
-        public final int incrementAndGet() {
-            return unsafe.getAndAddInt(this, valueOffset, 1) + 1;
+        public final boolean compareAndSet(int expect, int update) {
+            return unsafe.compareAndSwapInt(this, valueOffset, expect, update);
         }
 
     }
