@@ -130,13 +130,13 @@ public class ReentrantLock extends AbstractQueuedSynchronizer implements Lock, j
             final Thread current = Thread.currentThread();
             int c = getState();
             if (c == 0) {
-                if (compareAndSetState(0, acquires)) {
+                if (compareAndSetState(0, acquires)) {//CAS修改state
                     setExclusiveOwnerThread(current);
                     return true;
                 }
             }
             else if (current == getExclusiveOwnerThread()) {
-                int nextc = c + acquires;
+                int nextc = c + acquires;//计算重入后的state
                 if (nextc < 0) // overflow
                     throw new Error("Maximum lock count exceeded");
                 setState(nextc);
@@ -146,13 +146,13 @@ public class ReentrantLock extends AbstractQueuedSynchronizer implements Lock, j
         }
 
         protected final boolean tryRelease(int releases) {
-            int c = getState() - releases;
+            int c = getState() - releases;//计算释放后的state值
             if (Thread.currentThread() != getExclusiveOwnerThread())
                 throw new IllegalMonitorStateException();
             boolean free = false;
             if (c == 0) {
-                free = true;
-                setExclusiveOwnerThread(null);//设置独占锁持有线程为null
+                free = true;//锁全部释放，可以唤醒下一个等待线程
+                setExclusiveOwnerThread(null);//设置锁持有线程为null
             }
             setState(c);
             return free;
@@ -202,6 +202,7 @@ public class ReentrantLock extends AbstractQueuedSynchronizer implements Lock, j
          * Performs lock.  Try immediate barge, backing up to normal
          * acquire on failure.
          */
+        //非公平锁获取
         final void lock() {
             if (compareAndSetState(0, 1))
                 setExclusiveOwnerThread(Thread.currentThread());
@@ -209,6 +210,7 @@ public class ReentrantLock extends AbstractQueuedSynchronizer implements Lock, j
                 acquire(1);
         }
 
+        //非公平锁获取
         protected final boolean tryAcquire(int acquires) {
             return nonfairTryAcquire(acquires);
         }
@@ -220,6 +222,7 @@ public class ReentrantLock extends AbstractQueuedSynchronizer implements Lock, j
     static final class FairSync extends Sync {
         private static final long serialVersionUID = -3000897897090466540L;
 
+        //公平锁获取
         final void lock() {
             acquire(1);
         }
@@ -230,19 +233,20 @@ public class ReentrantLock extends AbstractQueuedSynchronizer implements Lock, j
          */
         protected final boolean tryAcquire(int acquires) {
             final Thread current = Thread.currentThread();
-            int c = getState();
+            int c = getState();//获取锁状态state
             if (c == 0) {
-                if (!hasQueuedPredecessors() &&
-                    compareAndSetState(0, acquires)) {
+                if (!hasQueuedPredecessors() && //判断当前线程是否还有前节点
+                    compareAndSetState(0, acquires)) {//CAS修改state
+                    //获取锁成功，设置锁的持有线程为当前线程
                     setExclusiveOwnerThread(current);
                     return true;
                 }
             }
-            else if (current == getExclusiveOwnerThread()) {
-                int nextc = c + acquires;
+            else if (current == getExclusiveOwnerThread()) {//当前线程已经持有锁
+                int nextc = c + acquires;//重入
                 if (nextc < 0)
                     throw new Error("Maximum lock count exceeded");
-                setState(nextc);
+                setState(nextc);//更新state状态
                 return true;
             }
             return false;
@@ -281,6 +285,7 @@ public class ReentrantLock extends AbstractQueuedSynchronizer implements Lock, j
      * purposes and lies dormant until the lock has been acquired,
      * at which time the lock hold count is set to one.
      */
+    //获取锁，一直等待锁可用
     public void lock() {
         sync.lock();
     }
@@ -453,6 +458,7 @@ public class ReentrantLock extends AbstractQueuedSynchronizer implements Lock, j
      * @throws IllegalMonitorStateException if the current thread does not
      *         hold this lock
      */
+    //释放锁
     public void unlock() {
         sync.release(1);
     }
@@ -496,6 +502,7 @@ public class ReentrantLock extends AbstractQueuedSynchronizer implements Lock, j
      *
      * @return the Condition object
      */
+    //创建一个等待条件
     public Condition newCondition() {
         return sync.newCondition();
     }

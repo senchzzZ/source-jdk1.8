@@ -228,6 +228,7 @@ public interface Condition {
      * @throws InterruptedException if the current thread is interrupted
      *         (and interruption of thread suspension is supported)
      */
+    //
     void await() throws InterruptedException;
 
     /**

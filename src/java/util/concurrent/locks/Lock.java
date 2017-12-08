@@ -181,6 +181,7 @@ public interface Lock {
      * circumstances and the exception type must be documented by that
      * {@code Lock} implementation.
      */
+    //获取锁，如果锁不可用则线程一直等待
     void lock();
 
     /**
@@ -229,6 +230,7 @@ public interface Lock {
      *         interrupted while acquiring the lock (and interruption
      *         of lock acquisition is supported)
      */
+    //获取锁，响应中断，如果锁不可用则线程一直等待
     void lockInterruptibly() throws InterruptedException;
 
     /**
@@ -258,6 +260,7 @@ public interface Lock {
      * @return {@code true} if the lock was acquired and
      *         {@code false} otherwise
      */
+    //获取锁，获取失败直接返回
     boolean tryLock();
 
     /**
@@ -318,6 +321,7 @@ public interface Lock {
      *         while acquiring the lock (and interruption of lock
      *         acquisition is supported)
      */
+    //获取锁，等待给定时间后如果获取失败直接返回
     boolean tryLock(long time, TimeUnit unit) throws InterruptedException;
 
     /**
@@ -332,6 +336,7 @@ public interface Lock {
      * Any restrictions and the exception
      * type must be documented by that {@code Lock} implementation.
      */
+    //释放锁
     void unlock();
 
     /**
@@ -353,5 +358,6 @@ public interface Lock {
      * @throws UnsupportedOperationException if this {@code Lock}
      *         implementation does not support conditions
      */
+    //创建一个新的等待条件
     Condition newCondition();
 }

@@ -18,6 +18,21 @@ import java.util.function.IntUnaryOperator;
  */
 public class MyJUCTemplate {
 
+    public interface Lock {
+        //获取锁，如果锁不可用则线程一直等待
+        void lock();
+        //获取锁，响应中断，如果锁不可用则线程一直等待
+        void lockInterruptibly() throws InterruptedException;
+        //获取锁，获取失败直接返回
+        boolean tryLock();
+        //获取锁，等待给定时间后如果获取失败直接返回
+        boolean tryLock(long time, TimeUnit unit) throws InterruptedException;
+        //释放锁
+        void unlock();
+        //创建一个新的等待条件
+        Condition newCondition();
+    }
+
 
     public class AtomicInteger extends Number implements java.io.Serializable {
         private static final long serialVersionUID = 6214790243416807050L;

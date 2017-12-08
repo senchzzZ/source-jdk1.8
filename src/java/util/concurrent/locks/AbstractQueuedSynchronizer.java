@@ -668,6 +668,7 @@ public abstract class AbstractQueuedSynchronizer
         Node s = node.next;//找到下一个需要唤醒的结点
         if (s == null || s.waitStatus > 0) {
             s = null;
+            //next节点为空，从tail节点开始向前查找有效节点
             for (Node t = tail; t != null && t != node; t = t.prev)
                 if (t.waitStatus <= 0)
                     s = t;
@@ -681,7 +682,7 @@ public abstract class AbstractQueuedSynchronizer
      * propagation. (Note: For exclusive mode, release just amounts
      * to calling unparkSuccessor of head if it needs signal.)
      */
-    //释放共享锁-唤醒后继线程并保证后继节点的传播
+    //释放共享资源-唤醒后继线程并保证后继节点的传播
     private void doReleaseShared() {
         /*
          * Ensure that a release propagates, even if there are other
@@ -705,7 +706,7 @@ public abstract class AbstractQueuedSynchronizer
                     unparkSuccessor(h);//唤醒后继节点
                 }
                 else if (ws == 0 &&
-                         !compareAndSetWaitStatus(h, 0, Node.PROPAGATE))
+                         !compareAndSetWaitStatus(h, 0, Node.PROPAGATE))//waitStatus为0，CAS修改为PROPAGATE
                     continue;                // loop on failed CAS
             }
             if (h == head)                   // loop if head changed
@@ -1167,7 +1168,7 @@ public abstract class AbstractQueuedSynchronizer
      *         correctly.
      * @throws UnsupportedOperationException if shared mode is not supported
      */
-    /**共享锁获取资源,成功返回true*/
+    /**共享模式获取资源*/
     protected int tryAcquireShared(int arg) {
         throw new UnsupportedOperationException();
     }
@@ -1320,7 +1321,7 @@ public abstract class AbstractQueuedSynchronizer
      *        {@link #tryAcquireShared} but is otherwise uninterpreted
      *        and can represent anything you like.
      */
-    /**共享锁获取资源*/
+    /**共享模式获取资源，忽略中断*/
     public final void acquireShared(int arg) {
         if (tryAcquireShared(arg) < 0)
             doAcquireShared(arg);
@@ -1382,7 +1383,7 @@ public abstract class AbstractQueuedSynchronizer
      *        and can represent anything you like.
      * @return the value returned from {@link #tryReleaseShared}
      */
-    /**共享锁释放资源*/
+    /**共享模式释放资源*/
     public final boolean releaseShared(int arg) {
         if (tryReleaseShared(arg)) {
             doReleaseShared();//释放锁，并唤醒后继节点
@@ -1767,6 +1768,7 @@ public abstract class AbstractQueuedSynchronizer
      * @param node the condition node for this wait
      * @return previous sync state
      */
+    //
     final int fullyRelease(Node node) {
         boolean failed = true;
         try {
@@ -1896,6 +1898,7 @@ public abstract class AbstractQueuedSynchronizer
          * Adds a new waiter to wait queue.
          * @return its new wait node
          */
+        //添加一个新的条件节点
         private Node addConditionWaiter() {
             Node t = lastWaiter;
             // If lastWaiter is cancelled, clean out.
@@ -2080,10 +2083,11 @@ public abstract class AbstractQueuedSynchronizer
          * <li> If interrupted while blocked in step 4, throw InterruptedException.
          * </ol>
          */
+        //使当前线程在接到信号或被中断之前一直处于等待状态。
         public final void await() throws InterruptedException {
             if (Thread.interrupted())
                 throw new InterruptedException();
-            Node node = addConditionWaiter();
+            Node node = addConditionWaiter();//添加并返回一个新的条件节点
             int savedState = fullyRelease(node);
             int interruptMode = 0;
             while (!isOnSyncQueue(node)) {
