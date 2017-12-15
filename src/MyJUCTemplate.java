@@ -458,40 +458,51 @@ public class MyJUCTemplate {
 
         abstract static class Sync extends AbstractQueuedSynchronizer {
             private static final long serialVersionUID = 6317671515068378041L;
-            // 最多支持65535个写锁和65535个读锁；低16位表示写锁计数，高16位表示持有读锁的线程数
+            // 最多支持65535(1<<16 -1)个写锁和65535个读锁；低16位表示写锁计数，高16位表示持有读锁的线程数
             static final int SHARED_SHIFT   = 16;
-            // 由于读锁用高位部分，读锁个数加1，其实是状态值加 2^16
-            // 0000000000000001|0000000000000000
+            // 读锁高16位，读锁个数加1，其实是状态值加 2^16
             static final int SHARED_UNIT    = (1 << SHARED_SHIFT);
-            // 读锁最大数量,0000000000000000|1111111111111111
+            // 锁最大数量
             static final int MAX_COUNT      = (1 << SHARED_SHIFT) - 1;
-            // 写锁的掩码，用于状态的低16位有效值0000000000000000|1111111111111111
+            // 写锁掩码，用于标记低16位
             static final int EXCLUSIVE_MASK = (1 << SHARED_SHIFT) - 1;
-            /** 读锁计数，当前持有读锁的线程数，c的高16位 */
+            //读锁计数，当前持有读锁的线程数，c的高16位
             static int sharedCount(int c)    { return c >>> SHARED_SHIFT; }
-            /** 写锁的计数，也就是它的重入次数,c的低16位*/
+            //写锁的计数，也就是它的重入次数,c的低16位
             static int exclusiveCount(int c) { return c & EXCLUSIVE_MASK; }
 
-            //表示占有读锁的线程数量
+            //读锁线程数
             static int sharedCount(int c)    { return c >>> SHARED_SHIFT; }
-            //表示占有写锁的线程数量
+            //写锁线程数
             static int exclusiveCount(int c) { return c & EXCLUSIVE_MASK; }
-            /**
-             * 当前线程持有的可重入读锁的数量，仅在构造方法和readObject(反序列化)
-             * 时被初始化，当持有锁的数量为0时，移除此对象。
-             */
+            //当前线程持有的读锁重入数量
             private transient ThreadLocalHoldCounter readHolds;
-            /**
-             * 最近一个成功获取读锁的线程的计数。这省却了ThreadLocal查找，
-             * 通常情况下，下一个释放线程是最后一个获取线程。这不是 volatile 的，
-             * 因为它仅用于试探的，线程进行缓存也是可以的
-             * （因为判断是否是当前线程是通过线程id来比较的）。
-             */
+            //最近一个获取读锁成功的线程计数器
             private transient HoldCounter cachedHoldCounter;
-            // 第一个读线程
+            // 第一个获取读锁的线程
             private transient Thread firstReader = null;
-            // 第一个读线程的计数
+            //firstReader的持有数
             private transient int firstReaderHoldCount;
+            // 构造函数
+            Sync() {
+                readHolds = new ThreadLocalHoldCounter();
+                setState(getState()); // ensures visibility of readHolds
+            }
+            // 读锁线程计数器
+            static final class HoldCounter {
+                int count = 0;
+                // Use id, not reference, to avoid garbage retention
+                final long tid = getThreadId(Thread.currentThread());
+            }
+            // 本地线程计数器
+            static final class ThreadLocalHoldCounter
+                    extends ThreadLocal<HoldCounter> {
+                // 重写初始化方法，在没有进行set的情况下，获取的都是该HoldCounter值
+                public HoldCounter initialValue() {
+                    return new HoldCounter();
+                }
+            }
+
         }
         // 构造函数
         Sync() {

@@ -39,6 +39,7 @@ import java.util.concurrent.locks.AbstractQueuedSynchronizer;
 /**
  * A synchronization aid that allows one or more threads to wait until
  * a set of operations being performed in other threads completes.
+ * 一个同步辅助类，在其他线程完成它们的操作之前，允许一个多个线程等待。
  *
  * <p>A {@code CountDownLatch} is initialized with a given <em>count</em>.
  * The {@link #await await} methods block until the current count reaches
@@ -162,6 +163,7 @@ public class CountDownLatch extends AbstractQueuedSynchronizer {
     private static final class Sync extends AbstractQueuedSynchronizer {
         private static final long serialVersionUID = 4982264981922014374L;
 
+        //CountDownLatch中的计数其实就是AQS的state
         Sync(int count) {
             setState(count);
         }
@@ -196,6 +198,7 @@ public class CountDownLatch extends AbstractQueuedSynchronizer {
      *        before threads can pass through {@link #await}
      * @throws IllegalArgumentException if {@code count} is negative
      */
+    //构造函数
     public CountDownLatch(int count) {
         if (count < 0) throw new IllegalArgumentException("count < 0");
         this.sync = new Sync(count);
@@ -228,6 +231,7 @@ public class CountDownLatch extends AbstractQueuedSynchronizer {
      * @throws InterruptedException if the current thread is interrupted
      *         while waiting
      */
+    //使当前线程等待直到锁计数变为0或者线程被中断
     public void await() throws InterruptedException {
         sync.acquireSharedInterruptibly(1);
     }
@@ -273,6 +277,7 @@ public class CountDownLatch extends AbstractQueuedSynchronizer {
      * @throws InterruptedException if the current thread is interrupted
      *         while waiting
      */
+    //使当前线程在锁计数变为0之前一直等待，除非线程被中断或超出了指定的等待时间。
     public boolean await(long timeout, TimeUnit unit)
         throws InterruptedException {
         return sync.tryAcquireSharedNanos(1, unit.toNanos(timeout));
@@ -288,6 +293,7 @@ public class CountDownLatch extends AbstractQueuedSynchronizer {
      *
      * <p>If the current count equals zero then nothing happens.
      */
+    //递减锁计数，如果锁计数变为0，释放所有等待线程
     public void countDown() {
         sync.releaseShared(1);
     }
@@ -299,6 +305,7 @@ public class CountDownLatch extends AbstractQueuedSynchronizer {
      *
      * @return the current count
      */
+    //返回当前计数
     public long getCount() {
         return sync.getCount();
     }

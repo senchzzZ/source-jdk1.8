@@ -178,7 +178,7 @@ public abstract class CyclicBarrier{
      * on each generation.  It is reset to parties on each new
      * generation or when broken.
      */
-    //等待parties数，count=0 -> tripped
+    //等待到达barrier的参与线程数量，count=0 -> tripped
     private int count;
 
     /**
@@ -290,6 +290,7 @@ public abstract class CyclicBarrier{
      *        tripped, or {@code null} if there is no action
      * @throws IllegalArgumentException if {@code parties} is less than 1
      */
+    //构造函数，指定参与线程数，并在所有线程到达barrier之后执行给定的barrierAction逻辑
     public CyclicBarrier(int parties, Runnable barrierAction) {
         if (parties <= 0) throw new IllegalArgumentException();
         this.parties = parties;
@@ -306,6 +307,7 @@ public abstract class CyclicBarrier{
      *        before the barrier is tripped
      * @throws IllegalArgumentException if {@code parties} is less than 1
      */
+    //构造函数，指定参与线程数
     public CyclicBarrier(int parties) {
         this(parties, null);
     }
@@ -315,6 +317,7 @@ public abstract class CyclicBarrier{
      *
      * @return the number of parties required to trip this barrier
      */
+    //获取参与等待到达barrier的线程数
     public int getParties() {
         return parties;
     }
@@ -373,6 +376,7 @@ public abstract class CyclicBarrier{
      *         broken when {@code await} was called, or the barrier
      *         action (if present) failed due to an exception
      */
+    //等待所有的参与者到达barrier
     public int await() throws InterruptedException, BrokenBarrierException {
         try {
             return dowait(false, 0L);
@@ -444,6 +448,7 @@ public abstract class CyclicBarrier{
      *         when {@code await} was called, or the barrier action (if
      *         present) failed due to an exception
      */
+    //等待所有的参与者到达barrier，或等待给定的时间
     public int await(long timeout, TimeUnit unit)
         throws InterruptedException,
                BrokenBarrierException,
@@ -459,6 +464,7 @@ public abstract class CyclicBarrier{
      *         construction or the last reset, or a barrier action
      *         failed due to an exception; {@code false} otherwise.
      */
+    //查询barrier是否处于broken状态
     public boolean isBroken() {
         final ReentrantLock lock = this.lock;
         lock.lock();
@@ -478,6 +484,7 @@ public abstract class CyclicBarrier{
      * and choose one to perform the reset.  It may be preferable to
      * instead create a new barrier for subsequent use.
      */
+    //重置barrier为初始状态
     public void reset() {
         final ReentrantLock lock = this.lock;
         lock.lock();
@@ -495,6 +502,7 @@ public abstract class CyclicBarrier{
      *
      * @return the number of parties currently blocked in {@link #await}
      */
+    //返回等待barrier的线程数量
     public int getNumberWaiting() {
         final ReentrantLock lock = this.lock;
         lock.lock();

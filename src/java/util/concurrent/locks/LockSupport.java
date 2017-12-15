@@ -39,6 +39,7 @@ import sun.misc.Unsafe;
 /**
  * Basic thread blocking primitives for creating locks and other
  * synchronization classes.
+ * 为锁和其他同步类提供的基本的线程阻塞原语
  *
  * <p>This class associates, with each thread that uses it, a permit
  * (in the sense of the {@link java.util.concurrent.Semaphore
