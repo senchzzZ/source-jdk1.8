@@ -51,6 +51,10 @@ import java.io.Serializable;
  * characteristics. But under high contention, expected throughput of
  * this class is significantly higher, at the expense of higher space
  * consumption.
+ * 当多个线程共同更新一个值（例如统计汇总）时，要优于 AtomicLong，并不是为了更细粒度的控制同步。
+ * 在资源低争用的情况下，AtomicLong 和 LongAdder 也基本没什么差别。
+ * 但是在高争用的情况下，LongAdder的吞吐量要明显高于AtomicLong，也会有更高的空间消耗。
+ *
  *
  * <p>LongAdders can be used with a {@link
  * java.util.concurrent.ConcurrentHashMap} to maintain a scalable
