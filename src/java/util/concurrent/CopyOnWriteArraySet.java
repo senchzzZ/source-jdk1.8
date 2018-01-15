@@ -51,15 +51,19 @@ import java.util.function.Consumer;
  *       stay small, read-only operations
  *       vastly outnumber mutative operations, and you need
  *       to prevent interference among threads during traversal.
+ *       适合元素比较少，并且读取操作高于更新(add/set/remove)操作的场景
  *  <li>It is thread-safe.
  *  <li>Mutative operations ({@code add}, {@code set}, {@code remove}, etc.)
  *      are expensive since they usually entail copying the entire underlying
  *      array.
+ *      由于每次更新需要复制内部数组，所以更新操作开销比较大
  *  <li>Iterators do not support the mutative {@code remove} operation.
+ *  Iterator不支持更新操作
  *  <li>Traversal via iterators is fast and cannot encounter
  *      interference from other threads. Iterators rely on
  *      unchanging snapshots of the array at the time the iterators were
  *      constructed.
+ *      通过iterator遍历时效率更高
  * </ul>
  *
  * <p><b>Sample Usage.</b> The following code sketch uses a

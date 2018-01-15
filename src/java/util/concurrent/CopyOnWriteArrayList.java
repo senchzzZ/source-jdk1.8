@@ -55,6 +55,7 @@ import java.util.function.UnaryOperator;
  * A thread-safe variant of {@link java.util.ArrayList} in which all mutative
  * operations ({@code add}, {@code set}, and so on) are implemented by
  * making a fresh copy of the underlying array.
+ * 一个线程安全的ArrayList，它对所有的元素插入或更新操作都是通过复制内部的数组来实现
  *
  * <p>This is ordinarily too costly, but may be <em>more</em> efficient
  * than alternatives when traversal operations vastly outnumber
@@ -70,6 +71,8 @@ import java.util.function.UnaryOperator;
  * operations on iterators themselves ({@code remove}, {@code set}, and
  * {@code add}) are not supported. These methods throw
  * {@code UnsupportedOperationException}.
+ * 由于每次更新元素都会复制内部数组，这样会导致它的开销很大，但是在并发访问时效率更高。
+ * 由于遍历时是使用“快照（内部数组）”方式实现，所以它的iterator不支持remove、set、add操作。
  *
  * <p>All elements are permitted, including {@code null}.
  *
@@ -93,9 +96,11 @@ public class CopyOnWriteArrayList<E>
     private static final long serialVersionUID = 8673264195747942595L;
 
     /** The lock protecting all mutators */
+    //锁
     final transient ReentrantLock lock = new ReentrantLock();
 
     /** The array, accessed only via getArray/setArray. */
+    //用于存储元素的内部数组
     private transient volatile Object[] array;
 
     /**
@@ -432,10 +437,11 @@ public class CopyOnWriteArrayList<E>
      */
     public boolean add(E e) {
         final ReentrantLock lock = this.lock;
-        lock.lock();
+        lock.lock();//加锁
         try {
             Object[] elements = getArray();
             int len = elements.length;
+            //新增元素追加到最后一个索引位
             Object[] newElements = Arrays.copyOf(elements, len + 1);
             newElements[len] = e;
             setArray(newElements);
@@ -454,7 +460,7 @@ public class CopyOnWriteArrayList<E>
      */
     public void add(int index, E element) {
         final ReentrantLock lock = this.lock;
-        lock.lock();
+        lock.lock();//加锁
         try {
             Object[] elements = getArray();
             int len = elements.length;
@@ -462,12 +468,14 @@ public class CopyOnWriteArrayList<E>
                 throw new IndexOutOfBoundsException("Index: "+index+
                                                     ", Size: "+len);
             Object[] newElements;
-            int numMoved = len - index;
+            int numMoved = len - index;//需要拷贝的后半段元素数
             if (numMoved == 0)
                 newElements = Arrays.copyOf(elements, len + 1);
             else {
                 newElements = new Object[len + 1];
+                //拷贝0-index数据
                 System.arraycopy(elements, 0, newElements, 0, index);
+                //拷贝index后数据
                 System.arraycopy(elements, index, newElements, index + 1,
                                  numMoved);
             }
@@ -487,17 +495,19 @@ public class CopyOnWriteArrayList<E>
      */
     public E remove(int index) {
         final ReentrantLock lock = this.lock;
-        lock.lock();
+        lock.lock();//加锁
         try {
             Object[] elements = getArray();
             int len = elements.length;
             E oldValue = get(elements, index);
-            int numMoved = len - index - 1;
+            int numMoved = len - index - 1;//需要拷贝的后半段元素数
             if (numMoved == 0)
                 setArray(Arrays.copyOf(elements, len - 1));
             else {
                 Object[] newElements = new Object[len - 1];
+                //拷贝0-index数据
                 System.arraycopy(elements, 0, newElements, 0, index);
+                //拷贝index后数据
                 System.arraycopy(elements, index + 1, newElements, index,
                                  numMoved);
                 setArray(newElements);
@@ -1128,6 +1138,7 @@ public class CopyOnWriteArrayList<E>
 
     static final class COWIterator<E> implements ListIterator<E> {
         /** Snapshot of the array */
+        //Iterator存数数组快照，因此在Iterator中不能修改元素
         private final Object[] snapshot;
         /** Index of element to be returned by subsequent call to next.  */
         private int cursor;
