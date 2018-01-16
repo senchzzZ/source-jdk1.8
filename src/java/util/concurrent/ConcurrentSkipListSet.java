@@ -52,6 +52,7 @@ import java.util.Spliterator;
  * sorted according to their {@linkplain Comparable natural ordering},
  * or by a {@link Comparator} provided at set creation time, depending
  * on which constructor is used.
+ * 一个可扩展的并发有序集合
  *
  * <p>This implementation provides expected average <i>log(n)</i> time
  * cost for the {@code contains}, {@code add}, and {@code remove}
