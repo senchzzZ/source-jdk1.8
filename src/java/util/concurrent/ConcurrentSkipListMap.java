@@ -487,6 +487,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
          * @param f the assumed current successor of this node
          * @return true if successful
          */
+        //为节点添加删除标识
         boolean appendMarker(Node<K,V> f) {
             return casNext(f, new Node<K,V>(f));
         }
@@ -812,7 +813,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
             throw new NullPointerException();
         Comparator<? super K> cmp = comparator;
         outer: for (;;) {
-            //从最底层给定key节点的前继节点开始向后查找
+            //从最底层(base-level)给定key节点的前继节点开始向后查找
             for (Node<K,V> b = findPredecessor(key, cmp), n = b.next;;) {
                 Object v; int c;
                 if (n == null)
@@ -973,7 +974,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
                     }
 
                     if (j == insertionLevel) { //新跳表head层级等于旧跳表head层级
-                        if (!q.link(r, t))//把新增节点插入q和r之间
+                        if (!q.link(r, t))//把新增节点t插入q和r之间
                             break; // restart
                         if (t.node.value == null) {//新增节点被删除
                             findNode(key);//清除已删除的节点
@@ -1010,6 +1011,9 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
      * search for it, and we'd like to ensure lack of garbage
      * retention, so must call to be sure.
      *
+     * 删除主方法。定位node、空value，先添加一个删除标志，解除前继节点与之的链接，
+     * 移除相关的index节点，可能会减少跳表层级
+     *
      * @param key the key
      * @param value if non-null, the value that must be
      * associated with key
@@ -1020,7 +1024,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
             throw new NullPointerException();
         Comparator<? super K> cmp = comparator;
         outer: for (;;) {
-            //b:比key对应的node小(左侧)的节点
+            //找到给定key节点的前继节点
             for (Node<K,V> b = findPredecessor(key, cmp), n = b.next;;) {
                 Object v; int c;
                 if (n == null)
@@ -1029,7 +1033,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
                 if (n != b.next)                    // inconsistent read
                     break;
                 if ((v = n.value) == null) {        // n is deleted
-                    n.helpDelete(b, f);
+                    n.helpDelete(b, f);//帮助清除已删除节点
                     break;
                 }
                 if (b.value == null || v == n)      // b is deleted
@@ -1044,10 +1048,12 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
                 }
                 if (value != null && !value.equals(v))
                     break outer;
-                if (!n.casValue(v, null))//当前节点的value设为空
+                if (!n.casValue(v, null))//找到指定节点，把节点的value置空
                     break;
-                //n替换为f,b的next替换为f
+                //给节点添加删除标识（next节点改为一个指向自身的节点）
+                //然后把前继节点的next节点CAS修改为next.next节点（彻底解除n节点的链接）
                 if (!n.appendMarker(f) || !b.casNext(n, f))
+                    //如果cas失败，清除已删除的节点后重新循环
                     findNode(key);                  // retry via findNode
                 else {
                     //删除n节点对应的index
@@ -1057,7 +1063,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
                         tryReduceLevel();
                 }
                 @SuppressWarnings("unchecked") V vv = (V)v;
-                return vv;
+                return vv;//返回对应value
             }
         }
         return null;
@@ -1083,7 +1089,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
      * slowing down access more than would an occasional unwanted
      * reduction.
      */
-    //尝试表降级
+    //尝试减少跳表层级，跳表层级大于3才会降级
     private void tryReduceLevel() {
         HeadIndex<K,V> h = head;
         HeadIndex<K,V> d;
