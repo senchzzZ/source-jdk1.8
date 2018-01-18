@@ -64,7 +64,7 @@ import java.util.function.Function;
  * The map is sorted according to the {@linkplain Comparable natural
  * ordering} of its keys, or by a {@link Comparator} provided at map
  * creation time, depending on which constructor is used.
- * 一个可扩展的并发有序Map
+ * 一个可扩展的并发有序Map，不允许存储null值
  *
  * <p>This class implements a concurrent variant of <a
  * href="http://en.wikipedia.org/wiki/Skip_list" target="_top">SkipLists</a>

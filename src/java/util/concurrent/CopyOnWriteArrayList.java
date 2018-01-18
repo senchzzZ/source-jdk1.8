@@ -56,6 +56,7 @@ import java.util.function.UnaryOperator;
  * operations ({@code add}, {@code set}, and so on) are implemented by
  * making a fresh copy of the underlying array.
  * 一个线程安全的ArrayList，它对所有的元素插入或更新操作都是通过复制内部的数组来实现
+ * 允许null值
  *
  * <p>This is ordinarily too costly, but may be <em>more</em> efficient
  * than alternatives when traversal operations vastly outnumber

@@ -103,7 +103,7 @@ public class ArrayBlockingQueue<E> extends AbstractQueue<E>
     int putIndex;
 
     /** Number of elements in the queue */
-    //队列中的项
+    //元素数
     int count;
 
     /*
@@ -127,7 +127,7 @@ public class ArrayBlockingQueue<E> extends AbstractQueue<E>
      * are known not to be any.  Allows queue operations to update
      * iterator state.
      */
-    //当前活动迭代器共享状态,没有的话为null.允许队列操作时更新迭代器状态
+    //共享的活动迭代器,允许队列操作时更新迭代器状态
     transient Itrs itrs = null;
 
     // Internal helper methods

@@ -58,6 +58,8 @@ import java.util.function.Consumer;
  * many threads will share access to a common collection.
  * Like most other concurrent collection implementations, this class
  * does not permit the use of {@code null} elements.
+ * 单向链表结构的无界并发队列。元素操作顺序为FIFO (first-in-first-out)。
+ * 不允许null值。
  *
  * <p>This implementation employs an efficient <em>non-blocking</em>
  * algorithm based on one described in <a
@@ -71,6 +73,7 @@ import java.util.function.Consumer;
  * java.util.ConcurrentModificationException}, and may proceed concurrently
  * with other operations.  Elements contained in the queue since the creation
  * of the iterator will be returned exactly once.
+ * Iterator使用软引用机制，返回的元素只代表某一时间点的状态
  *
  * <p>Beware that, unlike in most collections, the {@code size} method
  * is <em>NOT</em> a constant-time operation. Because of the
@@ -93,6 +96,9 @@ import java.util.function.Consumer;
  * <a href="package-summary.html#MemoryVisibility"><i>happen-before</i></a>
  * actions subsequent to the access or removal of that element from
  * the {@code ConcurrentLinkedQueue} in another thread.
+ * 内存一致性：对ConcurrentLinkedQueue的插入操作先行发生于(happen-before)
+ * 访问或移除操作。
+ *
  *
  * <p>This class is a member of the
  * <a href="{@docRoot}/../technotes/guides/collections/index.html">
@@ -118,6 +124,8 @@ public class ConcurrentLinkedQueue<E> extends AbstractQueue<E>
      * to recycled nodes, so there is no need to use "counted
      * pointers" or related techniques seen in versions used in
      * non-GC'ed settings.
+     * 和多数非阻塞算法一样，这个实现也依赖垃圾收集系统，通过回收node节点不会出现ABA问题，
+     * 所以就没有必要使用计数指针(counted pointers)或相关技术
      *
      * The fundamental invariants are:
      * - There is exactly one (last) Node with a null next reference,
@@ -133,6 +141,13 @@ public class ConcurrentLinkedQueue<E> extends AbstractQueue<E>
      *   head to advance.  A dequeued Node may remain in use
      *   indefinitely due to creation of an Iterator or simply a
      *   poll() that has lost its time slice.
+     * 基本不变性
+     * - 当入队插入新节点之后，队列中有一个 next 引用为null（最后一个）的节点
+     *   这个最后的节点可以已O(1)的时间复杂度访问到（tail节点），但是tail节点只不过是一种优化方式
+     *   ，也可以一直以O(n)的时间复杂度从head访问到。
+     * - 从 head 开始遍历队列，可以访问所有 item 域不为 null 的节点。
+     *   CAS修改这些节点的 item 为null就可以移除节点。
+     *   由于迭代器的创建或调用poll()时失去执行时间片，一个已经出队的节点可能会被一直使用。
      *
      * The above might appear to imply that all Nodes are GC-reachable
      * from a predecessor dequeued Node.  That would cause two problems:
@@ -145,6 +160,14 @@ public class ConcurrentLinkedQueue<E> extends AbstractQueue<E>
      * be of the kind understood by the GC.  We use the trick of
      * linking a Node that has just been dequeued to itself.  Such a
      * self-link implicitly means to advance to head.
+     * 以上所述可能会出现所有节点从一个前继已经出队的节点都是GC可达的。
+     * 这就可能导致两个问题：
+     * - 允许一个游离的迭代器，从而导致无限制的内存滞留
+     * - 如果一个节点在老年代，就会出现新节点与老节点跨代链接（cross-generational），
+     *   这样的话GC就需要花很长一段时间处理，导致重复清理老年代
+     * 所以，只有未删除的节点需要从已经出队的节点可达，并且这个可达性并不是必要的（但必须是GC可以识别的“可达性”）
+     * 我们使用一种技巧—已经出队的节点链接指向自身。这样一个自链接节点意味着head需要向前推进。
+     *
      *
      * Both head and tail are permitted to lag.  In fact, failing to
      * update them every time one could is a significant optimization
@@ -152,9 +175,13 @@ public class ConcurrentLinkedQueue<E> extends AbstractQueue<E>
      * documentation for that class), we use a slack threshold of two;
      * that is, we update head/tail when the current pointer appears
      * to be two or more steps away from the first/last node.
+     * head 和 tail 节点都允许滞后。实际上，每次不更新它们也是一种优化方式。
+     * 与LinkedTransferQueue一样，我们使用了一个阀值，
+     * 当当前指针离head/tail节点有两个或更多的距离时，我们才会更新head/tail。
      *
      * Since head and tail are updated concurrently and independently,
      * it is possible for tail to lag behind head (why not)?
+     * 由于head和tail节点的更新可能同时独立地发生，所以有可能导致head在tail后面。
      *
      * CASing a Node's item reference to null atomically removes the
      * element from the queue.  Iterators skip over Nodes with null
@@ -163,6 +190,9 @@ public class ConcurrentLinkedQueue<E> extends AbstractQueue<E>
      * to be successfully removed by two concurrent operations.  The
      * method remove(Object) also lazily unlinks deleted Nodes, but
      * this is merely an optimization.
+     * CAS修改一个节点的item为null就可以从队列中移除这个节点。迭代器会跳过这些空item的节点。
+     * 这个类之前的实现在poll()和remove(Object)之间有一个竞争，可能会导致两个并发的操作同时移除同一个节点。
+     * remove(Object) 方法也是延迟删除节点，这也是一种优化方式。
      *
      * When constructing a Node (before enqueuing it) we avoid paying
      * for a volatile write to item by using Unsafe.putObject instead
@@ -175,6 +205,8 @@ public class ConcurrentLinkedQueue<E> extends AbstractQueue<E>
      * Node with null item.  Both head and tail are only updated using
      * CAS, so they never regress, although again this is merely an
      * optimization.
+     * head和tail节点可能都会指向一个空item的节点。如果队列为空，所有item也都为空。
+     * 在创建时，head和tail 会指向一个虚拟的节点(item为null)。head和tail只能通过CAS更新。
      */
 
     private static class Node<E> {
@@ -234,14 +266,15 @@ public class ConcurrentLinkedQueue<E> extends AbstractQueue<E>
      *   to not be reachable from head!
      */
     /**
-     * 在执行方法之前和之后，head 必须保持的不变式：
-         所有“活着”的节点（指未删除节点），都能从 head 通过调用 succ() 方法遍历可达。
+     * 不变性：
+         所有live节点（指未删除节点），都能从 head 通过调用 succ() 方法遍历可达。
          head 不能为 null。
-         head 节点的 next 域不能引用到自身。
-     在执行方法之前和之后，head 的可变式：
+         head 节点的 next 不能引用到自身。
+       可变性：
          head 节点的 item 域可能为 null，也可能不为 null。
          允许 tail 滞后（lag behind）于 head，也就是说：从 head 开始遍历队列，不一定能到达 tail。
      */
+    //头节点
     private transient volatile Node<E> head;
 
     /**
@@ -257,10 +290,10 @@ public class ConcurrentLinkedQueue<E> extends AbstractQueue<E>
      * - tail.next may or may not be self-pointing to tail.
      */
     /**
-     * 在执行方法之前和之后，tail 必须保持的不变式：
+     * 不变性：
          通过 tail 调用 succ() 方法，最后节点总是可达的。
          tail 不能为 null。
-       在执行方法之前和之后，tail 的可变式：
+       可变性：
          tail 节点的 item 域可能为 null，也可能不为 null。
          允许 tail 滞后于 head，也就是说：从 head 开始遍历队列，不一定能到达 tail。
          tail 节点的 next 域可以引用到自身。
@@ -357,7 +390,7 @@ public class ConcurrentLinkedQueue<E> extends AbstractQueue<E>
                     // Successful CAS is the linearization point
                     // for e to become an element of this queue,
                     // and for newNode to become "live".
-                    if (p != t) // hop two nodes at a time 跳两个节点时才修改tail
+                    if (p != t) // hop two nodes at a time 跳两个节点以上时才修改tail
                         casTail(t, newNode);  // Failure is OK.cas替换尾节点
                     return true;
                 }
@@ -372,7 +405,7 @@ public class ConcurrentLinkedQueue<E> extends AbstractQueue<E>
                 p = (t != (t = tail)) ? t : head;
             else
                 // Check for tail updates after two hops.
-                //重新寻找tail节点
+                //继续向后查找，如果tail节点变化，重新获取tail
                 p = (p != t && t != (t = tail)) ? t : q;
         }
     }

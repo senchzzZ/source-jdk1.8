@@ -52,7 +52,7 @@ import java.util.Spliterator;
  * sorted according to their {@linkplain Comparable natural ordering},
  * or by a {@link Comparator} provided at set creation time, depending
  * on which constructor is used.
- * 一个可扩展的并发有序集合
+ * 一个可扩展的并发有序集合,不允许存储null值
  *
  * <p>This implementation provides expected average <i>log(n)</i> time
  * cost for the {@code contains}, {@code add}, and {@code remove}
@@ -103,6 +103,7 @@ public class ConcurrentSkipListSet<E>
      * element.  This field is declared final for the sake of thread
      * safety, which entails some ugliness in clone().
      */
+    //内部持有ConcurrentSkipListMap操作元素，Boolean.TRUE作为每个元素的value。
     private final ConcurrentNavigableMap<E,Object> m;
 
     /**
