@@ -165,6 +165,7 @@ public class ConcurrentLinkedQueue<E> extends AbstractQueue<E>
      * - 允许一个游离的迭代器，从而导致无限制的内存滞留
      * - 如果一个节点在老年代，就会出现新节点与老节点跨代链接（cross-generational），
      *   这样的话GC就需要花很长一段时间处理，导致重复清理老年代
+     *
      * 所以，只有未删除的节点需要从已经出队的节点可达，并且这个可达性并不是必要的（但必须是GC可以识别的“可达性”）
      * 我们使用一种技巧—已经出队的节点链接指向自身。这样一个自链接节点意味着head需要向前推进。
      *
@@ -390,18 +391,16 @@ public class ConcurrentLinkedQueue<E> extends AbstractQueue<E>
                     // Successful CAS is the linearization point
                     // for e to become an element of this queue,
                     // and for newNode to become "live".
-                    if (p != t) // hop two nodes at a time 跳两个节点以上时才修改tail
+                    if (p != t) // hop two nodes at a time 跳两个节点时才修改tail
                         casTail(t, newNode);  // Failure is OK.cas替换尾节点
                     return true;
                 }
                 // Lost CAS race to another thread; re-read next
             }
-            else if (p == q)//在else里可能出现p==q
-                // We have fallen off list.  If tail is unchanged, it
-                // will also be off-list, in which case we need to
-                // jump to head, from which all live nodes are always
-                // reachable.  Else the new tail is a better bet.
-                //如果尾节点变了,返回p=t,否则p=head,继续循环
+            else if (p == q)
+                // p节点指向自身，说明p是一个自链节点，此时需要重新获取tail节点，
+                // 如果tail节点被其他线程修改，此时需要从head开始向后遍历，因为
+                // 从head可以到达所有的live节点。
                 p = (t != (t = tail)) ? t : head;
             else
                 // Check for tail updates after two hops.
@@ -413,26 +412,26 @@ public class ConcurrentLinkedQueue<E> extends AbstractQueue<E>
     public E poll() {
         restartFromHead:
         for (;;) {
-            //h：头结点
+            //从head节点向后查找第一个live节点
             for (Node<E> h = head, p = h, q;;) {
-                E item = p.item;//获取头节点元素
+                E item = p.item;
 
-                if (item != null && p.casItem(item, null)) {//cas修改head节点的元素为null
+                if (item != null && p.casItem(item, null)) {//找到第一个节点，cas修改节点item为null
                     // Successful CAS is the linearization point
                     // for item to be removed from this queue.
-                    if (p != h) // hop two nodes at a time 弹出两个节点时才修改head
+                    if (p != h) // 跳两个节点以上时才修改head
                         //cas修改head节点
                         updateHead(h, ((q = p.next) != null) ? q : p);
                     return item;
                 }
-                else if ((q = p.next) == null) {//head.next为空
-                    updateHead(h, p);//cas修改head
+                else if ((q = p.next) == null) {//队列已空，返回null
+                    updateHead(h, p);//cas修改head节点为p
                     return null;
                 }
-                else if (p == q)
+                else if (p == q)//p为自链接节点，重新获取head循环
                     continue restartFromHead;//跳转到restartFromHead重新循环
                 else
-                    p = q;
+                    p = q;//向后查找
             }
         }
     }
@@ -443,14 +442,14 @@ public class ConcurrentLinkedQueue<E> extends AbstractQueue<E>
         for (;;) {
             for (Node<E> h = head, p = h, q;;) {
                 E item = p.item;
-                if (item != null || (q = p.next) == null) {
+                if (item != null || (q = p.next) == null) {//找到第一个节点，返回节点item
                     updateHead(h, p);//修改头节点
                     return item;
                 }
-                else if (p == q)//head的next指向自己
+                else if (p == q)//p为自链接节点，重新获取head循环
                     continue restartFromHead;
                 else
-                    p = q;
+                    p = q;//向后查找
             }
         }
     }
@@ -601,7 +600,7 @@ public class ConcurrentLinkedQueue<E> extends AbstractQueue<E>
             return false;
 
         // Atomically append the chain at the tail of this collection
-        /** 为啥调用offer呢 {@link #offer(Object)} */
+        /** 为啥不直接调用offer呢 {@link #offer(Object)} */
         for (Node<E> t = tail, p = t;;) {
             Node<E> q = p.next;
             if (q == null) {

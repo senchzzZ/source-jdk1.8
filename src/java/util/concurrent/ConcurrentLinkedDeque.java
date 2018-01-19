@@ -54,6 +54,7 @@ import java.util.function.Consumer;
  * many threads will share access to a common collection.
  * Like most other concurrent collection implementations, this class
  * does not permit the use of {@code null} elements.
+ * 双向链表结构的无界并发队列。不允许存储null值
  *
  * <p>Iterators and spliterators are
  * <a href="package-summary.html#Weakly"><i>weakly consistent</i></a>.
@@ -79,6 +80,8 @@ import java.util.function.Consumer;
  * <a href="package-summary.html#MemoryVisibility"><i>happen-before</i></a>
  * actions subsequent to the access or removal of that element from
  * the {@code ConcurrentLinkedDeque} in another thread.
+ * 内存一致性：对ConcurrentLinkedDeque的插入操作先行发生于(happen-before)
+ * 访问或移除操作。
  *
  * <p>This class is a member of the
  * <a href="{@docRoot}/../technotes/guides/collections/index.html">
@@ -108,6 +111,8 @@ public class ConcurrentLinkedDeque<E>
      * using two techniques: advancing multiple hops with a single CAS
      * and mixing volatile and non-volatile writes of the same memory
      * locations.
+     * 我们使用两种技术将volatile写的数量最小化:
+     * 使用单个CAS操作推进多个跳跃点，并将volatile和非volatile写入相同的内存位置。
      *
      * A node contains the expected E ("item") and links to predecessor
      * ("prev") and successor ("next") nodes:
@@ -117,6 +122,8 @@ public class ConcurrentLinkedDeque<E>
      * A node p is considered "live" if it contains a non-null item
      * (p.item != null).  When an item is CASed to null, the item is
      * atomically logically deleted from the collection.
+     * 如果节点的item不为null，那么它就是一个live节点。
+     * 当一个节点item被cas修改为null，那么这个节点相当于从链表中被删除
      *
      * At any time, there is precisely one "first" node with a null
      * prev reference that terminates any chain of prev references
@@ -124,19 +131,28 @@ public class ConcurrentLinkedDeque<E>
      * "last" node terminating any chain of next references starting at
      * a live node.  The "first" and "last" nodes may or may not be live.
      * The "first" and "last" nodes are always mutually reachable.
+     * 在任何时候，"first"节点都会有一个空的prev引用，终止任何从live节点开始的prev引用链。
+     * 类似地，"last"节点也会终止任何从live节点开始的next引用链。
+     * "first"和"last"节点可能是live节点，也可能不是。
+     * "first"和"last"节点总是相互可达的。
      *
      * A new element is added atomically by CASing the null prev or
      * next reference in the first or last node to a fresh node
      * containing the element.  The element's node atomically becomes
      * "live" at that point.
+     * 一个新的元素被添加到链表中的first或last节点后，包含这个元素的节点就是一个live节点。
      *
      * A node is considered "active" if it is a live node, or the
      * first or last node.  Active nodes cannot be unlinked.
+     * 如果一个节点是live节点或first/last节点，那么它也是一个active节点。
+     * active节点不会被解除链接。
      *
      * A "self-link" is a next or prev reference that is the same node:
      *   p.prev == p  or  p.next == p
      * Self-links are used in the node unlinking process.  Active nodes
      * never have self-links.
+     * “自链”节点：next或prev引用指向自身
+     * 自链节点用在解除节点链接时，Active节点不会是自链节点。
      *
      * A node p is active if and only if:
      *
@@ -151,17 +167,24 @@ public class ConcurrentLinkedDeque<E>
      * it is permissible for head and tail to be referring to deleted
      * nodes that have been unlinked and so may not be reachable from
      * any live node.
+     * ConcurrentLinkedDeque 内部有两个节点引用：head和tail。
+     * head/tail也可能不是first/last节点。
+     * 从head节点通过prev引用总是可以找到first节点，从tail节点通过next引用总是可以找到last节点。
+     * 允许head和tail引用已删除的节点，这些节点没有链接，因此可能无法从live节点访问到。
      *
      * There are 3 stages of node deletion;
      * "logical deletion", "unlinking", and "gc-unlinking".
+     * 删除的3个阶段：逻辑删除->解除链接->GC解除链接
      *
      * 1. "logical deletion" by CASing item to null atomically removes
      * the element from the collection, and makes the containing node
      * eligible for unlinking.
+     * 逻辑删除：通过CAS修改节点item为null来完成。表示当前节点可以被解除链接。
      *
      * 2. "unlinking" makes a deleted node unreachable from active
      * nodes, and thus eventually reclaimable by GC.  Unlinked nodes
      * may remain reachable indefinitely from an iterator.
+     * 解除链接：使节点从active节点不可达，最终被GC回收。已经解除链接的节点也可能在迭代器中可以访问到。
      *
      * Physical node unlinking is merely an optimization (albeit a
      * critical one), and so can be performed at our convenience.  At
@@ -171,16 +194,22 @@ public class ConcurrentLinkedDeque<E>
      * prev links from the last node.  However, this is not true for
      * nodes that have already been logically deleted - such nodes may
      * be reachable in one direction only.
+     * 解除节点链接仅仅是一个优化方式，在我们方便的时候也可以这样做。
+     * 在任何时候，从first通过next找到的live节点和从last通过prev找到的节点是相等的。
+     * 但是，在节点被逻辑删除时上述结论不成立，这些被逻辑删除的节点也可能从一端是可达的。
      *
      * 3. "gc-unlinking" takes unlinking further by making active
      * nodes unreachable from deleted nodes, making it easier for the
      * GC to reclaim future deleted nodes.  This step makes the data
      * structure "gc-robust", as first described in detail by Boehm
      * (http://portal.acm.org/citation.cfm?doid=503272.503282).
+     * GC解除链接使已经被解除链接的节点从active不可达，使GC更容易回收被删除的节点。
+     * 这一步是为了使数据结构保持GC健壮性(gc-robust)，防止保守垃圾收集器对这些边界空间的使用（只需要了解，后面会专门开篇讲解）。
      *
      * GC-unlinked nodes may remain reachable indefinitely from an
      * iterator, but unlike unlinked nodes, are never reachable from
      * head or tail.
+     * GC解链节点可能被iterator访问到，但是从head或tail访问不可达。
      *
      * Making the data structure GC-robust will eliminate the risk of
      * unbounded memory retention with conservative GCs and is likely
@@ -262,10 +291,10 @@ public class ConcurrentLinkedDeque<E>
     /**
      * 在执行方法之前和之后，head 必须保持的不变式：
          第一个节点总是能以O(1)的时间复杂度从head通过prev链接到达
-         所有“活着”的节点（指未删除节点），都能从第一个节点通过调用 succ() 方法遍历可达。
+         所有live节点（item不为null的节点），都能从第一个节点通过调用 succ() 方法遍历可达。
          head 不能为 null。
          head 节点的 next 域不能引用到自身。
-         head 节点不会是gc-unlinked状态（但可能处于unlinked状态）
+         head 对GC Root一直是可达状态（但它可能处于unlinked状态）
      在执行方法之前和之后，head 的可变式：
          head 节点的 item 域可能为 null，也可能不为 null。
          head 节点可能从第一个或最后一个节点或 tail 节点访问时不可达
@@ -289,7 +318,7 @@ public class ConcurrentLinkedDeque<E>
          最后一个节点总是能以O(1)的时间复杂度从 tail 通过 next 链接到达
          通过 tail 调用 succ() 方法，最后节点总是可达的。
          tail 不能为 null。
-         tail 节点不会是gc-unlinked状态（但可能处于unlinked状态）
+         tail 对GC Root一直是可达状态（但可能处于unlinked状态）
      在执行方法之前和之后，tail 的可变式：
          tail 节点的 item 域可能为 null，也可能不为 null。
          允许 tail 滞后于 head，也就是说：从 head 开始遍历队列，不一定能到达 tail。
