@@ -170,11 +170,11 @@ public class ConcurrentLinkedDeque<E>
      * ConcurrentLinkedDeque 内部有两个节点引用：head和tail。
      * head/tail也可能不是first/last节点。
      * 从head节点通过prev引用总是可以找到first节点，从tail节点通过next引用总是可以找到last节点。
-     * 允许head和tail引用已删除的节点，这些节点没有链接，因此可能无法从live节点访问到。
+     * 允许head和tail引用已删除的节点，这些节点已经被解除链接，因此可能无法从live节点访问到。
      *
      * There are 3 stages of node deletion;
      * "logical deletion", "unlinking", and "gc-unlinking".
-     * 删除的3个阶段：逻辑删除->解除链接->GC解除链接
+     * 删除的3个阶段：逻辑删除->未链接->GC未链接
      *
      * 1. "logical deletion" by CASing item to null atomically removes
      * the element from the collection, and makes the containing node
@@ -184,7 +184,7 @@ public class ConcurrentLinkedDeque<E>
      * 2. "unlinking" makes a deleted node unreachable from active
      * nodes, and thus eventually reclaimable by GC.  Unlinked nodes
      * may remain reachable indefinitely from an iterator.
-     * 解除链接：使节点从active节点不可达，最终被GC回收。已经解除链接的节点也可能在迭代器中可以访问到。
+     * 未链接：使节点从active节点不可达，最终被GC回收。已经解除链接的节点也可能在迭代器中可以访问到。
      *
      * Physical node unlinking is merely an optimization (albeit a
      * critical one), and so can be performed at our convenience.  At
@@ -203,17 +203,18 @@ public class ConcurrentLinkedDeque<E>
      * GC to reclaim future deleted nodes.  This step makes the data
      * structure "gc-robust", as first described in detail by Boehm
      * (http://portal.acm.org/citation.cfm?doid=503272.503282).
-     * GC解除链接使已经被解除链接的节点从active不可达，使GC更容易回收被删除的节点。
+     * GC未链接使已经被解除链接的节点从active不可达，使GC更容易回收被删除的节点。
      * 这一步是为了使数据结构保持GC健壮性(gc-robust)，防止保守垃圾收集器对这些边界空间的使用（只需要了解，后面会专门开篇讲解）。
      *
      * GC-unlinked nodes may remain reachable indefinitely from an
      * iterator, but unlike unlinked nodes, are never reachable from
      * head or tail.
-     * GC解链节点可能被iterator访问到，但是从head或tail访问不可达。
+     * GC未链接节点可能被iterator访问到，但是从head或tail访问不可达。
      *
      * Making the data structure GC-robust will eliminate the risk of
      * unbounded memory retention with conservative GCs and is likely
      * to improve performance with generational GCs.
+     * 对保守的GC来说，使数据结构保持GC健壮性会消除内存无限滞留的问题，同时也提高了分代收机器的性能。
      *
      * When a node is dequeued at either end, e.g. via poll(), we would
      * like to break any references from the node to active nodes.  We
@@ -232,6 +233,8 @@ public class ConcurrentLinkedDeque<E>
      * head/tail are needed to get "back on track" by other nodes that
      * are gc-unlinked.  gc-unlinking accounts for much of the
      * implementation complexity.
+     * 当一个节点从队列中移除时，我们会摧毁这个节点对所有active节点的引用。
+     * 我们开发出的自链接节点(self-links)在其他并发集合类里也是非常有效率的。
      *
      * Since neither unlinking nor gc-unlinking are necessary for
      * correctness, there are many implementation choices regarding
@@ -241,6 +244,9 @@ public class ConcurrentLinkedDeque<E>
      * gc-unlinking can be performed rarely and still be effective,
      * since it is most important that long chains of deleted nodes
      * are occasionally broken.
+     * 由于读volatile变量要比CAS操作更加廉价，所以在同一时间通过CAS解除多个相邻节点的链接也是一种优化技巧。
+     * gc解除链接的执行可以很少，但它也是很有效的，因为最重要的是已删除节点组成的长链偶尔会被破坏。
+     *
      *
      * The actual representation we use is that p.next == p means to
      * goto the first node (which in turn is reached by following prev
@@ -271,6 +277,7 @@ public class ConcurrentLinkedDeque<E>
      * Empirically, microbenchmarks suggest that this class adds about
      * 40% overhead relative to ConcurrentLinkedQueue, which feels as
      * good as we can hope for.
+     * 相对于ConcurrentLinkedQueue，这个类多了40%的开销
      */
 
     private static final long serialVersionUID = 876323262645176354L;
@@ -294,10 +301,10 @@ public class ConcurrentLinkedDeque<E>
          所有live节点（item不为null的节点），都能从第一个节点通过调用 succ() 方法遍历可达。
          head 不能为 null。
          head 节点的 next 域不能引用到自身。
-         head 对GC Root一直是可达状态（但它可能处于unlinked状态）
+         head 不会是GC-unlinked节点（但它可能是unlink节点）
      在执行方法之前和之后，head 的可变式：
          head 节点的 item 域可能为 null，也可能不为 null。
-         head 节点可能从第一个或最后一个节点或 tail 节点访问时不可达
+         head 节点可能从first/last/tail 节点访问时不可达
      */
     private transient volatile Node<E> head;
 
@@ -316,12 +323,12 @@ public class ConcurrentLinkedDeque<E>
     /**
      * 在执行方法之前和之后，tail 必须保持的不变式：
          最后一个节点总是能以O(1)的时间复杂度从 tail 通过 next 链接到达
-         通过 tail 调用 succ() 方法，最后节点总是可达的。
+         所有live节点（item不为null的节点），都能从最后一个节点通过调用 pred() 方法遍历可达。
          tail 不能为 null。
-         tail 对GC Root一直是可达状态（但可能处于unlinked状态）
+         tail 不会是GC-unlinked节点（但它可能是unlink节点）
      在执行方法之前和之后，tail 的可变式：
          tail 节点的 item 域可能为 null，也可能不为 null。
-         允许 tail 滞后于 head，也就是说：从 head 开始遍历队列，不一定能到达 tail。
+         tail 节点可能从first/last/head 节点访问时不可达
      */
     private transient volatile Node<E> tail;
 
@@ -487,7 +494,7 @@ public class ConcurrentLinkedDeque<E>
         final Node<E> prev = x.prev;
         final Node<E> next = x.next;
         if (prev == null) {
-            //如果为操作节点为first
+            //如果操作节点为first节点
             unlinkFirst(x, next);
         } else if (next == null) {
             unlinkLast(x, prev);
@@ -511,6 +518,13 @@ public class ConcurrentLinkedDeque<E>
             // unchanged and ensuring that x is not reachable from
             // tail/head, before setting x's prev/next links to their
             // logical approximate replacements, self/TERMINATOR.
+            /*
+             * 我们的策略是找到x节点的活跃（active）前继和后继节点。
+             * 尝试修整它们之间的链接，让它们指向对方，留下一个从活跃(active)节点不可达的x节点。
+             * 如果成功执行，或者x节点没有live的前继/后继节点，再尝试gc解除链接(gc-unlink)，
+             * 在设置x节点的prev/next指向它们自己或TERMINATOR之前，
+             * 通过检查前继和后继节点的状态来保证x节点从head/tail不可达。
+             */
             Node<E> activePred, activeSucc;
             boolean isFirst, isLast;
             int hops = 1;
@@ -526,12 +540,12 @@ public class ConcurrentLinkedDeque<E>
                 Node<E> q = p.prev;
                 if (q == null) {
                     if (p.next == p)
-                        return;
+                        return;//自链接节点
                     activePred = p;
                     isFirst = true;
                     break;
                 }
-                else if (p == q)
+                else if (p == q)//自链接节点
                     return;
                 else
                     p = q;
@@ -552,13 +566,14 @@ public class ConcurrentLinkedDeque<E>
                     isLast = true;
                     break;
                 }
-                else if (p == q)
+                else if (p == q)//自链接节点
                     return;
                 else
                     p = q;
             }
 
             // TODO: better HOP heuristics
+            //无节点跳跃并且操作节点有first或last节点时不更新链表
             if (hops < HOPS
                 // always squeeze out interior deleted nodes
                 && (isFirst | isLast))          //d
@@ -566,6 +581,7 @@ public class ConcurrentLinkedDeque<E>
 
             // Squeeze out deleted nodes between activePred and
             // activeSucc, including x.
+            //连接两个活动节点
             skipDeletedSuccessors(activePred);            //e
             skipDeletedPredecessors(activeSucc);
 
@@ -596,11 +612,10 @@ public class ConcurrentLinkedDeque<E>
         // assert first != null;
         // assert next != null;
         // assert first.item == null;
-        //从next节点开始向后寻找有效节点
-        //如果first.next.item!=null，直接返回
+        //从next节点开始向后寻找有效节点，o：已删除节点(item为null)
         for (Node<E> o = null, p = next, q;;) {
             if (p.item != null || (q = p.next) == null) {
-                //找到合适节点p，cas替换first.next节点为p
+                //跳过已删除节点，CAS替换first的next节点为一个active节点p
                 if (o != null && p.prev != p && first.casNext(next, p)) {
                     //更新p的prev节点
                     skipDeletedPredecessors(p);
@@ -613,7 +628,7 @@ public class ConcurrentLinkedDeque<E>
                         updateTail(); // Ensure o is not reachable from tail
 
                         // Finally, actually gc-unlink
-                        //使未链接节点指向自身
+                        //使unlinking节点next指向自身
                         o.lazySetNext(o);
                         //设置移除节点的prev为PREV_TERMINATOR
                         o.lazySetPrev(prevTerminator());
@@ -621,7 +636,7 @@ public class ConcurrentLinkedDeque<E>
                 }
                 return;
             }
-            else if (p == q)
+            else if (p == q)//自链接节点
                 return;
             else {
                 o = p;
@@ -677,13 +692,14 @@ public class ConcurrentLinkedDeque<E>
         // trying to cas it to the first node until it does.
         Node<E> h, p, q;
         restartFromHead:
+        //从head开始往前查找
         while ((h = head).item == null && (p = h.prev) != null) {
             for (;;) {
                 if ((q = p.prev) == null ||
                     (q = (p = q).prev) == null) {
                     // It is possible that p is PREV_TERMINATOR,
                     // but if so, the CAS is guaranteed to fail.
-                    //p可能为pre的终止节点，替换head为p节点
+                    //p可能为prev的终止节点，替换head为p节点
                     if (casHead(h, p))
                         return;
                     else
@@ -743,18 +759,18 @@ public class ConcurrentLinkedDeque<E>
                     break findActive;
                 Node<E> q = p.prev;
                 if (q == null) {
-                    if (p.next == p)//p可能为self-node
+                    if (p.next == p)//p为self-node，重新查找
                         continue whileActive;
-                    break findActive;
+                    break findActive;//p为first节点
                 }
-                else if (p == q)
+                else if (p == q)//自链接节点，重新查找
                     continue whileActive;
                 else
                     p = q;//继续往前寻找有效节点
             }
 
             // found active CAS target
-            if (prev == p || x.casPrev(prev, p))//更新前节点
+            if (prev == p || x.casPrev(prev, p))//跳跃两次以上才更新前节点
                 return;
 
         } while (x.item != null || x.next == null);
@@ -1057,7 +1073,7 @@ public class ConcurrentLinkedDeque<E>
     public E pollFirst() {
         for (Node<E> p = first(); p != null; p = succ(p)) {
             E item = p.item;
-            if (item != null && p.casItem(item, null)) {
+            if (item != null && p.casItem(item, null)) {//cas进行逻辑删除(item设为null)
                 unlink(p);
                 return item;
             }

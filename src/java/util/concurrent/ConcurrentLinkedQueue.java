@@ -398,6 +398,10 @@ public class ConcurrentLinkedQueue<E> extends AbstractQueue<E>
                 // Lost CAS race to another thread; re-read next
             }
             else if (p == q)
+                // We have fallen off list.  If tail is unchanged, it
+                // will also be off-list, in which case we need to
+                // jump to head, from which all live nodes are always
+                // reachable.  Else the new tail is a better bet.
                 // p节点指向自身，说明p是一个自链节点，此时需要重新获取tail节点，
                 // 如果tail节点被其他线程修改，此时需要从head开始向后遍历，因为
                 // 从head可以到达所有的live节点。
