@@ -53,6 +53,7 @@ import java.util.function.Consumer;
  * element that has been on the queue the longest time for some
  * producer.  The <em>tail</em> of the queue is that element that has
  * been on the queue the shortest time for some producer.
+ * 链表结构的无界阻塞队列
  *
  * <p>Beware that, unlike in most collections, the {@code size} method
  * is <em>NOT</em> a constant-time operation. Because of the

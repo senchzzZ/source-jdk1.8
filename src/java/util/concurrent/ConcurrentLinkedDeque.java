@@ -425,8 +425,9 @@ public class ConcurrentLinkedDeque<E>
                     (q = (p = q).prev) != null)
                     // Check for head updates every other hop.
                     // If p == q, we are sure to follow head instead.
+                    //如果head被修改，返回head重新查找
                     p = (h != (h = head)) ? h : q;
-                else if (p.next == p) // PREV_TERMINATOR
+                else if (p.next == p) // 自链接节点，重新查找
                     continue restartFromHead;
                 else {
                     // p is first node
@@ -460,8 +461,9 @@ public class ConcurrentLinkedDeque<E>
                     (q = (p = q).next) != null)
                     // Check for tail updates every other hop.
                     // If p == q, we are sure to follow tail instead.
+                    //如果tail被修改，返回tail重新查找
                     p = (t != (t = tail)) ? t : q;
-                else if (p.prev == p) // NEXT_TERMINATOR
+                else if (p.prev == p) // 自链接节点，重新查找
                     continue restartFromTail;
                 else {
                     // p is last node
@@ -493,12 +495,11 @@ public class ConcurrentLinkedDeque<E>
 
         final Node<E> prev = x.prev;
         final Node<E> next = x.next;
-        if (prev == null) {
-            //如果操作节点为first节点
+        if (prev == null) {//操作节点为first节点
             unlinkFirst(x, next);
-        } else if (next == null) {
+        } else if (next == null) {//操作节点为last节点
             unlinkLast(x, prev);
-        } else {
+        } else {// common case
             // Unlink interior node.
             //
             // This is the common case, since a series of polls at the
@@ -523,7 +524,7 @@ public class ConcurrentLinkedDeque<E>
              * 尝试修整它们之间的链接，让它们指向对方，留下一个从活跃(active)节点不可达的x节点。
              * 如果成功执行，或者x节点没有live的前继/后继节点，再尝试gc解除链接(gc-unlink)，
              * 在设置x节点的prev/next指向它们自己或TERMINATOR之前，
-             * 通过检查前继和后继节点的状态来保证x节点从head/tail不可达。
+             * 需要检查x的前继和后继节点的状态未被改变，并保证x节点从head/tail不可达。
              */
             Node<E> activePred, activeSucc;
             boolean isFirst, isLast;
@@ -848,12 +849,12 @@ public class ConcurrentLinkedDeque<E>
                     (q = (p = q).prev) != null)
                     // Check for head updates every other hop.
                     // If p == q, we are sure to follow head instead.
-                    //如果head被其他修改返回新的head否则返回q继续往前循环寻找
+                    //如果head被修改则返回新的head重新查找，否则继续向前(prev)查找
                     p = (h != (h = head)) ? h : q;
                 else if (p == h
                          // It is possible that p is PREV_TERMINATOR,
                          // but if so, the CAS is guaranteed to fail.
-                        //p!=h需要cas替换head
+                        //找到的节点不是head节点，CAS修改head
                          || casHead(h, p))
                     return p;
                 else
