@@ -239,7 +239,7 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
      * continue from the "head".  Traversals trying to find the
      * current tail starting from "tail" may also encounter
      * self-links, in which case they also continue at "head".
-     * 如果GC延迟回收，已删除节点链会积累的很长，此时垃圾收集会耗费高昂的代价，并且所有刚删除的节点也不会被回收（保守式垃圾收集，以后会专门开篇讲解）。
+     * 如果GC延迟回收，已删除节点链会积累的很长，此时垃圾收集会耗费高昂的代价，并且所有刚出列的节点也不会被回收（保守式垃圾收集，以后会专门开篇讲解）。
      * 为了避免这种情况，我们在CAS推进head时，会把已弹出的head的"next"引用指向自身（及“自链接节点”），
      * 这样就限制了连接已删除节点的长度（我们也采取类似的方法，清除在其他节点字段中可能的垃圾保留值）。
      * 如果一个节点指向自身，那就表明当前线程已经滞后于另外一个更新head的线程，此时就需要重新获取head来遍历。
@@ -319,6 +319,8 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
      *
      *    If no candidates are found and the call was untimed
      *    poll/offer, (argument "how" is NOW) return.
+     *    通过要求每一次尝试都以两种方式前进(如果适用的话)
+     *    如果CAS失败，那么一个循环就会以两步的方式重试前进，直到成功或松弛最多两步。
      *
      * 2. Try to append a new node (method tryAppend)
      *
@@ -388,6 +390,13 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
      * cases, we can rule out the need for further action if either s
      * or its predecessor are (or can be made to be) at, or fall off
      * from, the head of list.
+     * 我们通过节点自链接的方式来减少垃圾滞留，同样也会解除内部已移除节点的链接。
+     * 在匹配超时、线程中断或调用remove时，这也些节点也会被清除（解除链接）。
+     * 例如，在某一时刻有一个节点 s 已经被移除，我们可以通过CAS修改s的前继节点的next引用的方式解除s的链接。
+     * 但是有两种情况不能保证节点s不可达：
+     * 1.如果s节点是一个next为null的节点（trailing node），但是它被作为入列时的目标节点，所以只有在其他节点入列之后才能移除它
+     * 2.通过给定s的前继节点，不一定会移除s节点：因为前继节点有可能已经被解除链接，这种情况下前继节点的前继节点有可能指向了s。
+     * 所以，通过这两点说明：在s节点或它的前继节点已经出列时，并不是必须要移除它们。
      *
      * Without taking these into account, it would be possible for an
      * unbounded number of supposedly removed nodes to remain
@@ -396,6 +405,9 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
      * calls to poll repeatedly time out but never otherwise fall off
      * the list because of an untimed call to take at the front of the
      * queue.
+     * 如果不考虑这些因素，对于一个无界的已经移除的节点链来说，它就有可能是可达的。
+     * 导致这种累积的情况并不常见，但在实践中可能会发生；例如，
+     * 当一系列poll操作反复超时，由于一个不定时的take在操作队列头，会导致这些节点一直在节点链中。
      *
      * When these cases arise, rather than always retraversing the
      * entire list to find an actual predecessor to unlink (which
@@ -412,6 +424,8 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
      * potentially O(n) operation (e.g. remove(x)), none of which are
      * time-critical enough to warrant the overhead that alternatives
      * would impose on other threads.
+     * 经过这些情况，我们记录了一个解除节点链接失败的值-sweepVotes，并且为其定义了一个阀值-SWEEP_THRESHOLD，
+     * 当失败次数超过这个阀值时就会对队列进行一次“大扫除”（通过sweep()方法），解除所有已取消的节点链接。
      *
      * Because the sweepVotes estimate is conservative, and because
      * nodes become unlinked "naturally" as they fall off the head of
@@ -658,12 +672,12 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
                     if (p.casItem(item, e)) { // 匹配成功，cas修改为指定元素 match
                         for (Node q = p; q != h;) {
                             Node n = q.next;  // update by 2 unless singleton
-                            if (head == h && casHead(h, n == null ? q : n)) {//更新head
+                            if (head == h && casHead(h, n == null ? q : n)) {//更新head为匹配节点的next节点
                                 h.forgetNext();//旧head节点指向自身等待回收
                                 break;
-                            }                 // head被其他线程修改，重新获取 head advance and retry
+                            }                 // cas失败，重新获取 head advance and retry
                             if ((h = head)   == null ||
-                                    (q = h.next) == null || !q.isMatched())//如果head的next节点未被匹配，跳出循环，不更新head，也就是跳跃节点数<2
+                                    (q = h.next) == null || !q.isMatched())//如果head的next节点未被匹配，跳出循环，不更新head，也就是松弛度<2
                                 break;        // unless slack < 2
                         }
                         LockSupport.unpark(p.waiter);//唤醒在节点上等待的线程
@@ -675,6 +689,7 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
                 p = (p != n) ? n : (h = head); // Use head if p offlist
             }
 
+            //未找到匹配节点，把当前节点加入到队列尾
             if (how != NOW) {                 // No matches available
                 if (s == null)
                     s = new Node(e, haveData);
@@ -1117,7 +1132,7 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
         if (pred != null && pred != s && pred.next == s) {
             Node n = s.next;
             if (n == null ||
-                (n != s && pred.casNext(s, n) && pred.isMatched())) {
+                (n != s && pred.casNext(s, n) && pred.isMatched())) {//解除s节点的链接
                 for (;;) {               // check if at, or could be, head
                     Node h = head;
                     if (h == pred || h == s || h == null)
@@ -1127,7 +1142,7 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
                     Node hn = h.next;
                     if (hn == null)
                         return;          // now empty
-                    if (hn != h && casHead(h, hn))
+                    if (hn != h && casHead(h, hn))//更新head
                         h.forgetNext();  // advance head
                 }
                 if (pred.next != pred && s.next != s) { // recheck if offlist
@@ -1153,6 +1168,7 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E>
      * 解除(通常是取消)从头部遍历时遇到的已经被匹配的节点的链接
      */
     private void sweep() {
+        //从head开始向后遍历
         for (Node p = head, s, n; p != null && (s = p.next) != null; ) {
             if (!s.isMatched())
                 // Unmatched nodes are never self-linked
