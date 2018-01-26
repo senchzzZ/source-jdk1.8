@@ -59,6 +59,7 @@ import java.util.function.Consumer;
  * Comparable natural ordering} also does not permit insertion of
  * non-comparable objects (doing so results in
  * {@code ClassCastException}).
+ * 无界优先级阻塞队列。不允许添加不可比较的值。
  *
  * <p>This class and its iterator implement all of the
  * <em>optional</em> methods of the {@link Collection} and {@link
@@ -149,7 +150,7 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
      * heap and each descendant d of n, n <= d.  The element with the
      * lowest value is in queue[0], assuming the queue is nonempty.
      *
-     * 基于一个平衡的二元堆实现
+     * 基于一个平衡的二元堆实现：子节点位置分别为2*n+1和2*(n+1)
      */
     private transient Object[] queue;
 
@@ -185,6 +186,7 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
      * to maintain compatibility with previous versions
      * of this class. Non-null only during serialization/deserialization.
      */
+    //内部PriorityQueue，用于兼容序列化
     private PriorityQueue<E> q;
 
     /**
