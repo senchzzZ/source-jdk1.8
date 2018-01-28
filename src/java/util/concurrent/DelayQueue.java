@@ -52,6 +52,7 @@ import java.util.*;
  * treated as normal elements. For example, the {@code size} method
  * returns the count of both expired and unexpired elements.
  * This queue does not permit null elements.
+ * 无界延迟阻塞队列
  *
  * <p>This class and its iterator implement all of the
  * <em>optional</em> methods of the {@link Collection} and {@link
@@ -89,6 +90,10 @@ public class DelayQueue<E extends Delayed> extends AbstractQueue<E>
      * waiting thread, but not necessarily the current leader, is
      * signalled.  So waiting threads must be prepared to acquire
      * and lose leadership while waiting.
+     * 等待获取队列头元素的线程，主从式设计，减少不必要的等待。当一个线程为leader，它将会等待下一个延迟消逝，
+     * 但是其他线程的等待是不确定的。在一个线程从take()或poll()获取数据返回前，leader必须唤醒其他等待的线程，
+     * 除非其他线程在这期间变成leader。如果队列头被一个有着更快过期时间的元素替换掉，leader将会被设置为null而失效，
+     * 并唤醒其他等待线程（不一定是当前leader线程）。所以等待线程在等待期间必须时刻准备获取并失去leader权限。
      */
     private Thread leader = null;
 
@@ -217,12 +222,12 @@ public class DelayQueue<E extends Delayed> extends AbstractQueue<E>
                 if (first == null)//首节点为空，等待
                     available.await();
                 else {
-                    long delay = first.getDelay(NANOSECONDS);
+                    long delay = first.getDelay(NANOSECONDS);//延时时间
                     if (delay <= 0)
                         return q.poll();
                     //释放first的引用，避免内存泄漏
                     first = null; // don't retain ref while waiting
-                    if (leader != null)//leader不为空，证明有其他线程已经获取到leader，加入条件队列
+                    if (leader != null)//leader不为空，证明有其他线程已经获取到leader，加入条件队列等到延时结束
                         available.await();
                     else {
                         Thread thisThread = Thread.currentThread();

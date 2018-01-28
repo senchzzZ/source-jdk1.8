@@ -57,6 +57,7 @@ import java.util.Spliterators;
  * {@code Collection} methods (for example {@code contains}), a
  * {@code SynchronousQueue} acts as an empty collection.  This queue
  * does not permit {@code null} elements.
+ * 同步阻塞队列
  *
  * <p>Synchronous queues are similar to rendezvous channels used in
  * CSP and Ada. They are well suited for handoff designs, in which an
@@ -212,7 +213,7 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
     static final long spinForTimeoutThreshold = 1000L;
 
     /** Dual stack */
-    /**非公平模式，栈实现*/
+    /**非公平模式，双栈实现*/
     static final class TransferStack<E> extends Transferer<E> {
         /*
          * This extends Scherer-Scott dual stack algorithm, differing,

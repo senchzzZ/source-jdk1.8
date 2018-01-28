@@ -149,7 +149,7 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
      * heap and each descendant d of n, n <= d.  The element with the
      * lowest value is in queue[0], assuming the queue is nonempty.
      *
-     * 基于一个平衡的二元堆实现
+     * 基于一个平衡的二元最小堆实现
      */
     private transient Object[] queue;
 
@@ -162,6 +162,7 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
      * The comparator, or null if priority queue uses elements'
      * natural ordering.
      */
+    //比较器
     private transient Comparator<? super E> comparator;
 
     /**
@@ -185,6 +186,7 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
      * to maintain compatibility with previous versions
      * of this class. Non-null only during serialization/deserialization.
      */
+    //内部PriorityQueue引用，用于兼容序列化
     private PriorityQueue<E> q;
 
     /**
@@ -334,11 +336,11 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
             return null;
         else {
             Object[] array = queue;
-            E result = (E) array[0];
-            E x = (E) array[n];
+            E result = (E) array[0];//第一个元素，即出列元素
+            E x = (E) array[n];//最后一个元素
             array[n] = null;
             Comparator<? super E> cmp = comparator;
-
+            //重构二叉堆
             if (cmp == null)
                 siftDownComparable(0, x, array, n);
             else
@@ -363,14 +365,15 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
      * @param x the item to insert
      * @param array the heap array
      */
-    /**在k位置插入元素x，从父节点开始向上找到合适位置，保持二元堆的性质不变*/
+    /**在k位置插入元素x，从父节点开始向上找到合适位置，保持二叉堆的性质不变*/
     private static <T> void siftUpComparable(int k, T x, Object[] array) {
         Comparable<? super T> key = (Comparable<? super T>) x;
         while (k > 0) {
+            //从父节点开始向上查找，并保持二叉堆性质
             int parent = (k - 1) >>> 1;
             Object e = array[parent];
             if (key.compareTo((T) e) >= 0)
-                break;
+                break;//找到合适位置，跳出循环
             array[k] = e;
             k = parent;
         }
@@ -380,10 +383,11 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
     private static <T> void siftUpUsingComparator(int k, T x, Object[] array,
                                        Comparator<? super T> cmp) {
         while (k > 0) {
+            //从父节点开始向上查找，并保持二叉堆性质
             int parent = (k - 1) >>> 1;
             Object e = array[parent];
             if (cmp.compare(x, (T) e) >= 0)
-                break;
+                break;//找到合适位置，跳出循环
             array[k] = e;
             k = parent;
         }
@@ -405,9 +409,10 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
                                                int n) {
         if (n > 0) {
             Comparable<? super T> key = (Comparable<? super T>)x;
+            //获取最后一个节点的父节点
             int half = n >>> 1;           // loop while a non-leaf
             while (k < half) {
-                //从左叶子节点查找
+                //从左叶子节点向下调整
                 int child = (k << 1) + 1; // assume left child is least
                 Object c = array[child];
                 int right = child + 1;
