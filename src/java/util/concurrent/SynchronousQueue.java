@@ -105,7 +105,7 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
      * similar. Fifo usually supports higher throughput under
      * contention but Lifo maintains higher thread locality in common
      * applications.
-     * 非公平模式通过栈(FIFO)实现，公平模式通过队列(LIFO)实现。使用的都是二重栈和二重队列。
+     * 非公平模式通过栈(FIFO)实现，公平模式通过队列(LIFO)实现。使用的都是双重栈和双重队列。
      * FIFO通常用于支持更高的吞吐量，LIFO则支持更高的线程局部存储（TLS）
      *
      * A dual queue (and similarly stack) is one that at any given
@@ -124,7 +124,9 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
      * so nearly all code can be combined. The resulting transfer
      * methods are on the long side, but are easier to follow than
      * they would be if broken up into nearly-duplicated parts.
-     * 内部的队列和栈都继承了内部类Transferer，
+     * 内部的队列和栈都继承了内部抽象类 Transferer，Transferer只有一个transfer方法，
+     * 用于队列put或take。它们被统一为一个方法，因为在双重队列/双重栈数据结构中，put和take操作是对称的，
+     * 所以几乎所有代码都可以合并。
      *
      * The queue and stack data structures share many conceptual
      * similarities but very few concrete details. For simplicity,
@@ -143,6 +145,9 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
      *  3. Support for cancellation via timeout and interrupts,
      *     including cleaning out cancelled nodes/threads
      *     from lists to avoid garbage retention and memory depletion.
+     *  1. 原始算法使用了标志位指针，但是 SynchronousQueue 在节点中使用了“mode”，导致更多的适应变化
+     *  2. SynchronousQueue 必须阻塞等待take/put
+     *  3. 支持取消操作（通过超时和中断），包括清除已取消节点/线程，避免垃圾保留和内存损耗。
      *
      * Blocking is mainly accomplished using LockSupport park/unpark,
      * except that nodes that appear to be the next ones to become
@@ -150,6 +155,8 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
      * busy synchronous queues, spinning can dramatically improve
      * throughput. And on less busy ones, the amount of spinning is
      * small enough not to be noticeable.
+     * 通过 LockSupport 的 park/unpark 实现阻塞，
+     * 在高争用环境下，自旋可以显著提高吞吐量。
      *
      * Cleaning is done in different ways in queues vs stacks.  For
      * queues, we can almost always remove a node immediately in O(1)
@@ -159,6 +166,11 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
      * potentially O(n) traversal to be sure that we can remove the
      * node, but this can run concurrently with other threads
      * accessing the stack.
+     * 在队列和栈中进行清理的方式不同。
+     * 对于队列来说，如果节点被取消，我们几乎总是可以以O1的时间复杂度移除节点。
+     * 但是如果节点在队尾，它必须等待后面节点的取消。
+     * 对于栈来说，我们可能需要O(n)的时间复杂度去遍历整个栈，然后确定节点可被移除，
+     * 但这可以与访问栈的其他线程并行运行。
      *
      * While garbage collection takes care of most node reclamation
      * issues that otherwise complicate nonblocking algorithms, care
@@ -171,6 +183,8 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
      * old head pointers), but references in Queue nodes must be
      * aggressively forgotten to avoid reachability of everything any
      * node has ever referred to since arrival.
+     * 垃圾收集算法：节点取消后指向自身，防止垃圾堆积。
+     *
      */
 
     /**
@@ -203,7 +217,7 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
      * variety of processors and OSes. Empirically, the best value
      * seems not to vary with number of CPUs (beyond 2) so is just
      * a constant.
-     * 阻塞等待的自旋次数
+     * 有时限的阻塞等待的自旋次数
      */
     static final int maxTimedSpins = (NCPUS < 2) ? 0 : 32;
 
@@ -211,19 +225,19 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
      * The number of times to spin before blocking in untimed waits.
      * This is greater than timed value because untimed waits spin
      * faster since they don't need to check times on each spin.
-     * 非计时的阻塞等待自旋次数
+     * 无时限的阻塞等待自旋次数
      */
     static final int maxUntimedSpins = maxTimedSpins * 16;
 
     /**
      * The number of nanoseconds for which it is faster to spin
      * rather than to use timed park. A rough estimate suffices.
-     * 自旋超时阀值
+     * 自旋时间阀值，纳秒级
      */
     static final long spinForTimeoutThreshold = 1000L;
 
     /** Dual stack */
-    /**非公平模式，双栈实现*/
+    /**非公平模式，双重栈实现*/
     static final class TransferStack<E> extends Transferer<E> {
         /*
          * This extends Scherer-Scott dual stack algorithm, differing,
