@@ -57,18 +57,25 @@ import java.util.Spliterators;
  * {@code Collection} methods (for example {@code contains}), a
  * {@code SynchronousQueue} acts as an empty collection.  This queue
  * does not permit {@code null} elements.
- * 同步阻塞队列
+ * 同步阻塞队列。每个插入操作都必须等待一个对应的移除操作，反之亦然。
+ * SynchronousQueue 内部没有容量，所以不能通过peek方法获取头部元素；
+ * 也不能单独插入元素，它的插入和移除是一对操作。
+ * 为了兼容 Collection 的某些操作(例如contains)，SynchronousQueue扮演了一个空集合的角色。
  *
  * <p>Synchronous queues are similar to rendezvous channels used in
  * CSP and Ada. They are well suited for handoff designs, in which an
  * object running in one thread must sync up with an object running
  * in another thread in order to hand it some information, event, or
  * task.
+ * 同步队列类似于在CSP和Ada中使用的会合通道。它比较适合“切换”或“传送”这种场景：
+ * 一个线程必须同步等待另外一个线程把相关信息/时间/任务传递给它。
  *
  * <p>This class supports an optional fairness policy for ordering
  * waiting producer and consumer threads.  By default, this ordering
  * is not guaranteed. However, a queue constructed with fairness set
  * to {@code true} grants threads access in FIFO order.
+ * 为等待过程中的生产者或消费者线程提供可选的公平策略。默认情况下是非公平的。
+ * 如果队列公平策略设为true（即为公平队列），则可以保证访问元素顺序为FIFO。
  *
  * <p>This class and its iterator implement all of the
  * <em>optional</em> methods of the {@link Collection} and {@link
@@ -98,6 +105,8 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
      * similar. Fifo usually supports higher throughput under
      * contention but Lifo maintains higher thread locality in common
      * applications.
+     * 非公平模式通过栈(FIFO)实现，公平模式通过队列(LIFO)实现。使用的都是二重栈和二重队列。
+     * FIFO通常用于支持更高的吞吐量，LIFO则支持更高的线程局部存储（TLS）
      *
      * A dual queue (and similarly stack) is one that at any given
      * time either holds "data" -- items provided by put operations,
@@ -115,6 +124,7 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
      * so nearly all code can be combined. The resulting transfer
      * methods are on the long side, but are easier to follow than
      * they would be if broken up into nearly-duplicated parts.
+     * 内部的队列和栈都继承了内部类Transferer，
      *
      * The queue and stack data structures share many conceptual
      * similarities but very few concrete details. For simplicity,
