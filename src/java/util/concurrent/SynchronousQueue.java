@@ -105,7 +105,7 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
      * similar. Fifo usually supports higher throughput under
      * contention but Lifo maintains higher thread locality in common
      * applications.
-     * 非公平模式通过栈(FIFO)实现，公平模式通过队列(LIFO)实现。使用的都是双重栈和双重队列。
+     * 非公平模式通过栈(LIFO)实现，公平模式通过队列(FIFO)实现。使用的都是双重栈和双重队列。
      * FIFO通常用于支持更高的吞吐量，LIFO则支持更高的线程局部存储（TLS）
      *
      * A dual queue (and similarly stack) is one that at any given
@@ -365,10 +365,12 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
         E transfer(E e, boolean timed, long nanos) {
             /*
              * Basic algorithm is to loop trying one of three actions:
+             * 基本算法是循环尝试三种行为之一:
              *
              * 1. If apparently empty or already containing nodes of same
              *    mode, try to push node on stack and wait for a match,
              *    returning it, or null if cancelled.
+             *    如果栈为空或者已经包含了一个相同的mode，
              *
              * 2. If apparently containing node of complementary mode,
              *    try to push a fulfilling node on to stack, match
