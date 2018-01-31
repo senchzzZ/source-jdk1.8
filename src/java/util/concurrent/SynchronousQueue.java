@@ -370,7 +370,8 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
              * 1. If apparently empty or already containing nodes of same
              *    mode, try to push node on stack and wait for a match,
              *    returning it, or null if cancelled.
-             *    如果栈为空或者已经包含了一个相同的mode，
+             *    如果栈为空或者已经包含了一个相同的mode，就把当前节点添加进栈中等待匹配。
+             *    返回此节点，如果节点取消就返回null。
              *
              * 2. If apparently containing node of complementary mode,
              *    try to push a fulfilling node on to stack, match
@@ -378,12 +379,14 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
              *    stack, and return matched item. The matching or
              *    unlinking might not actually be necessary because of
              *    other threads performing action 3:
+             *    如果栈中有一个互补的等待节点，尝试与此节点进行匹配，然后从栈中弹出这两个节点，并返回匹配节点的数据。
              *
              * 3. If top of stack already holds another fulfilling node,
              *    help it out by doing its match and/or pop
              *    operations, and then continue. The code for helping
              *    is essentially the same as for fulfilling, except
              *    that it doesn't return the item.
+             *    如果栈顶节点已经持有另外一个数据节点，则帮助此节点进行匹配操作，然后继续循环。
              */
 
             SNode s = null; // constructed/reused as needed
