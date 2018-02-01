@@ -217,7 +217,7 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
      * variety of processors and OSes. Empirically, the best value
      * seems not to vary with number of CPUs (beyond 2) so is just
      * a constant.
-     * 有时限的阻塞等待的自旋次数
+     * 有时限的阻塞等待前的自旋次数
      */
     static final int maxTimedSpins = (NCPUS < 2) ? 0 : 32;
 
@@ -225,7 +225,7 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
      * The number of times to spin before blocking in untimed waits.
      * This is greater than timed value because untimed waits spin
      * faster since they don't need to check times on each spin.
-     * 无时限的阻塞等待自旋次数
+     * 无时限的阻塞等待前的自旋次数
      */
     static final int maxUntimedSpins = maxTimedSpins * 16;
 
@@ -370,8 +370,8 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
              * 1. If apparently empty or already containing nodes of same
              *    mode, try to push node on stack and wait for a match,
              *    returning it, or null if cancelled.
-             *    如果栈为空或者已经包含了一个相同的mode，就把当前节点添加进栈中等待匹配。
-             *    返回此节点，如果节点取消就返回null。
+             *    如果栈为空或者已经包含了一个相同的mode，就把当前节点添加进栈顶等待匹配。
+             *    返回匹配节点的item，如果节点取消就返回null。
              *
              * 2. If apparently containing node of complementary mode,
              *    try to push a fulfilling node on to stack, match
@@ -397,17 +397,16 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
                 SNode h = head;
                 if (h == null || h.mode == mode) {  // empty or same-mode
                     if (timed && nanos <= 0) {      // can't wait
-                        if (h != null && h.isCancelled())//head不为空并且head==match
+                        if (h != null && h.isCancelled())//head已经被匹配，修改head继续循环
                             casHead(h, h.next);     // pop cancelled node
                         else
                             return null;
-                        //cas把head替换为新的s节点（item=e,next=h,mode=mode）
-                    } else if (casHead(h, s = snode(s, e, h, mode))) {
+                    } else if (casHead(h, s = snode(s, e, h, mode))) {//构建新的节点s，放到栈顶
                         //等待s节点被匹配，返回s.match节点m
                         SNode m = awaitFulfill(s, timed, nanos);
-                        //s.match==s（s节点被取消）
+                        //s.match==s（等待被取消）
                         if (m == s) {               // wait was cancelled
-                            clean(s);
+                            clean(s);//清除s节点
                             return null;
                         }
                         if ((h = head) != null && h.next == s)
@@ -416,12 +415,13 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
                     }
                 } else if (!isFulfilling(h.mode)) { //head节点还没有被匹配，尝试匹配 try to fulfill
                     if (h.isCancelled())            // already cancelled
-                        //head节点被取消，替换head节点继续循环
+                        //head已经被匹配，修改head继续循环
                         casHead(h, h.next);         // pop and retry
 
-                    //cas把head替换为新的s节点（item=e,next=h,mode=2|mode）
+                    //构建新节点，放到栈顶
                     else if (casHead(h, s=snode(s, e, h, FULFILLING|mode))) {
                         for (;;) { // loop until matched or waiters disappear
+                            //cas成功后s的match节点就是s.next，即m
                             SNode m = s.next;       // m is s's match
                             if (m == null) {        // all waiters are gone
                                 casHead(s, null);   // pop fulfill node
@@ -430,18 +430,18 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
                             }
                             SNode mn = m.next;
 
-                            if (m.tryMatch(s)) {//尝试匹配s节点
-                                casHead(s, mn);     // pop both s and m
+                            if (m.tryMatch(s)) {//尝试匹配，唤醒m节点的线程
+                                casHead(s, mn);     //弹出匹配成功的两个节点，替换head pop both s and m
                                 return (E) ((mode == REQUEST) ? m.item : s.item);
                             } else                  // lost match
-                                s.casNext(m, mn);   //匹配失败，替换next节点 help unlink
+                                s.casNext(m, mn);   //匹配失败，删除m节点，重新循环 help unlink
                         }
                     }
                 } else {                            //头节点正在匹配 help a fulfiller
                     SNode m = h.next;               // m is h's match
                     if (m == null)                  // waiter is gone
                         casHead(h, null);           // pop fulfilling node
-                    else {
+                    else {//帮助头节点匹配
                         SNode mn = m.next;
                         if (m.tryMatch(h))          // help match
                             casHead(h, mn);         // pop both h and m
@@ -465,14 +465,16 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
              * When a node/thread is about to block, it sets its waiter
              * field and then rechecks state at least one more time
              * before actually parking, thus covering race vs
-             * fulfiller noticing that waiter is non-null so should be
-             * woken.
+             * fulfiller noticing that waiter is non-null so should be woken.
+             * 当节点/线程需要阻塞时，首先设置waiter字段为当前线程，然后在真正阻塞之前重新检查一下节点状态。
+             *
              *
              * When invoked by nodes that appear at the point of call
              * to be at the head of the stack, calls to park are
              * preceded by spins to avoid blocking when producers and
              * consumers are arriving very close in time.  This can
              * happen enough to bother only on multiprocessors.
+             *
              *
              * The order of checks for returning out of main loop
              * reflects fact that interrupts have precedence over
@@ -494,13 +496,13 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
                     //取消对给定节点s的匹配节点的等待
                     s.tryCancel();
                 SNode m = s.match;//获取给定节点s的match节点
-                if (m != null)//只有在m不为空的时候才返回match
+                if (m != null)//已经匹配到，返回匹配节点
                     return m;
                 if (timed) {
                     //超时处理
                     nanos = deadline - System.nanoTime();
                     if (nanos <= 0L) {
-                        s.tryCancel();
+                        s.tryCancel();//超时，取消s节点的匹配
                         continue;
                     }
                 }
@@ -519,7 +521,7 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
 
         /**
          * Returns true if node s is at head or there is an active fulfiller.
-         * 给定节点s为head或者有一个活动的fulfiller时返回true
+         * 给定节点s为head或者head正在被匹配
          */
         boolean shouldSpin(SNode s) {
             SNode h = head;
