@@ -58,12 +58,14 @@ import java.util.function.Consumer;
  * operations obtain elements at the head of the queue.
  * Linked queues typically have higher throughput than array-based queues but
  * less predictable performance in most concurrent applications.
+ * 单向链表结构的自定义容量的阻塞队列，元素操作按照 FIFO (first-in-first-out 先入先出) 的顺序
  *
  * <p>The optional capacity bound constructor argument serves as a
  * way to prevent excessive queue expansion. The capacity, if unspecified,
  * is equal to {@link Integer#MAX_VALUE}.  Linked nodes are
  * dynamically created upon each insertion unless this would bring the
  * queue above capacity.
+ * 队列容量可通过构造参数来定义，如果未指定容量，将取最大容量Integer#MAX_VALUE。
  *
  * <p>This class and its iterator implement all of the
  * <em>optional</em> methods of the {@link Collection} and {@link
