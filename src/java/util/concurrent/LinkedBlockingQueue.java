@@ -59,6 +59,8 @@ import java.util.function.Consumer;
  * Linked queues typically have higher throughput than array-based queues but
  * less predictable performance in most concurrent applications.
  * 单向链表结构的自定义容量的阻塞队列，元素操作按照 FIFO (first-in-first-out 先入先出) 的顺序
+ * 链表结构的队列通常比基于数据的队列有更高的吞吐量，但是在并发环境下性能却不如数据队列。
+ *
  *
  * <p>The optional capacity bound constructor argument serves as a
  * way to prevent excessive queue expansion. The capacity, if unspecified,
@@ -95,6 +97,7 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
      * items have been entered since the signal. And symmetrically for
      * takes signalling puts. Operations such as remove(Object) and
      * iterators acquire both locks.
+     *
      *
      * Visibility between writers and readers is provided as follows:
      *
@@ -351,9 +354,9 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
         // holding count negative to indicate failure unless set.
         int c = -1;
         Node<E> node = new Node<E>(e);
-        final ReentrantLock putLock = this.putLock;
-        final AtomicInteger count = this.count;
-        putLock.lockInterruptibly();
+        final ReentrantLock putLock = this.putLock;//获取入列锁
+        final AtomicInteger count = this.count;//获取元素数
+        putLock.lockInterruptibly();//响应中断式加锁
         try {
             /*
              * Note that count is used in wait guard even though it is
@@ -362,11 +365,12 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
              * out by lock), and we (or some other waiting put) are
              * signalled if it ever changes from capacity. Similarly
              * for all other uses of count in other wait guards.
+             *
              */
             while (count.get() == capacity) {
-                notFull.await();
+                notFull.await();//队列已满，等待
             }
-            enqueue(node);
+            enqueue(node);//节点添加到队列尾
             c = count.getAndIncrement();
             if (c + 1 < capacity)
                 notFull.signal();
@@ -454,13 +458,13 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
         E x;
         int c = -1;
         final AtomicInteger count = this.count;
-        final ReentrantLock takeLock = this.takeLock;
-        takeLock.lockInterruptibly();
+        final ReentrantLock takeLock = this.takeLock;//获取出列锁
+        takeLock.lockInterruptibly();//响应中断式加锁
         try {
             while (count.get() == 0) {
-                notEmpty.await();
+                notEmpty.await();//队列为空，等待
             }
-            x = dequeue();
+            x = dequeue();//首节点出列
             c = count.getAndDecrement();
             if (c > 1)
                 notEmpty.signal();
@@ -498,25 +502,25 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
     }
     /**获取并消除头节点,忽略中断*/
     public E poll() {
-        final AtomicInteger count = this.count;
+        final AtomicInteger count = this.count;//获取元素数
         if (count.get() == 0)
             return null;
         E x = null;
         int c = -1;
         final ReentrantLock takeLock = this.takeLock;
-        takeLock.lock();
+        takeLock.lock();//加锁
         try {
             if (count.get() > 0) {
-                x = dequeue();
+                x = dequeue();//首节点出列
                 c = count.getAndDecrement();
                 if (c > 1)
-                    notEmpty.signal();
+                    notEmpty.signal();//
             }
         } finally {
             takeLock.unlock();
         }
         if (c == capacity)
-            signalNotFull();
+            signalNotFull();//唤醒入列等待条件
         return x;
     }
 
