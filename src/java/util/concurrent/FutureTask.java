@@ -46,6 +46,7 @@ import java.util.concurrent.locks.LockSupport;
  * the computation has completed, the computation cannot be restarted
  * or cancelled (unless the computation is invoked using
  * {@link #runAndReset}).
+ * 可取消的异步任务，也可用来表示一些时间较长的计算，这些计算可以在使用计算结果前启动。
  *
  * <p>A {@code FutureTask} can be used to wrap a {@link Callable} or
  * {@link Runnable} object.  Because {@code FutureTask} implements

@@ -45,6 +45,9 @@ package java.util.concurrent;
  * submitted in one part of a program or system, and then acted upon
  * in a different part of the program when the reads complete,
  * possibly in a different order than they were requested.
+ * CompletionService 将Executor和BlockingQueue的功能融合到一起，你可以将Callable任务提交给它来执行，
+ * 然后使用类似于队列操作的take/poll等方法来获得已完成的结果，而这些结果会在完成时将被封装成Future。
+ *
  *
  * <p>Typically, a {@code CompletionService} relies on a separate
  * {@link Executor} to actually execute the tasks, in which case the

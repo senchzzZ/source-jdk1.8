@@ -49,6 +49,8 @@ package java.util.concurrent;
  * of cancellability but not provide a usable result, you can
  * declare types of the form {@code Future<?>} and
  * return {@code null} as a result of the underlying task.
+ * 表示一个任务的生命周期，并提供了响应的方法来判断是否已经完成或取消，
+ * 以及获取任务的结果和取消任务等。
  *
  * <p>
  * <b>Sample Usage</b> (Note that the following classes are all
