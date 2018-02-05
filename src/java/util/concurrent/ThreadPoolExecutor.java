@@ -52,6 +52,9 @@ import java.util.*;
  * including threads, consumed when executing a collection of tasks.
  * Each {@code ThreadPoolExecutor} also maintains some basic
  * statistics, such as the number of completed tasks.
+ * 线程池解决了两个问题：当执行多个异步任务时，通过减少每个任务的执行开销，线程池会提供更好的性能，
+ * 并且在执行一系列任务时，提供了绑定和管理资源的方法。
+ * 每个ThreadPoolExecutor也维护了一些基础的数据统计，例如任务完成数量。
  *
  * <p>To be useful across a wide range of contexts, this class
  * provides many adjustable parameters and extensibility
@@ -64,16 +67,23 @@ import java.util.*;
  * preconfigure settings for the most common usage
  * scenarios. Otherwise, use the following guide when manually
  * configuring and tuning this class:
+ * 为了支持更广泛的上下文，ThreadPoolExecutor提供了许多可调节的参数和扩展性。
+ * 使用线程池的工具类Executors可以根据需要构造不同类型的池：
+ * newCachedThreadPool（无界线程池，线程自动回收）
+ * newFixedThreadPool（确定大小的线程池）
+ * newSingleThreadExecutor（只有一个线程的池）
  *
  * <dl>
  *
  * <dt>Core and maximum pool sizes</dt>
+ * 核心和最大池大小
  *
  * <dd>A {@code ThreadPoolExecutor} will automatically adjust the
  * pool size (see {@link #getPoolSize})
  * according to the bounds set by
  * corePoolSize (see {@link #getCorePoolSize}) and
  * maximumPoolSize (see {@link #getMaximumPoolSize}).
+ * ThreadPoolExecutor可以根据池界限自动调节核心池和最大池大小
  *
  * When a new task is submitted in method {@link #execute(Runnable)},
  * and fewer than corePoolSize threads are running, a new thread is
@@ -88,6 +98,9 @@ import java.util.*;
  * sizes are set only upon construction, but they may also be changed
  * dynamically using {@link #setCorePoolSize} and {@link
  * #setMaximumPoolSize}. </dd>
+ * 当一个新任务被提交到池中，如果当前运行线程小于核心线程数，即使当前有空闲线程，
+ * 也会新建一个线程来处理新提交的任务。如果当前运行线程数大于核心线程数并小于最大线程数，
+ * 只有当等待队列已满的情况下才会新建线程。
  *
  * <dt>On-demand construction</dt>
  *
@@ -96,6 +109,9 @@ import java.util.*;
  * dynamically using method {@link #prestartCoreThread} or {@link
  * #prestartAllCoreThreads}.  You probably want to prestart threads if
  * you construct the pool with a non-empty queue. </dd>
+ * 默认情况下，即使核心线程数已经被初始化，线程也只会在新任务到达时才会启动，
+ * 但可以通过prestartCoreThread方法动态修改这个策略。
+ * 如果构造池时传入了一个非空等待队列，可以通过prestartCoreThread预先启动线程。
  *
  * <dt>Creating new threads</dt>
  *
@@ -113,6 +129,11 @@ import java.util.*;
  * permission, service may be degraded: configuration changes may not
  * take effect in a timely manner, and a shutdown pool may remain in a
  * state in which termination is possible but not completed.</dd>
+ * 线程池通过ThreadFactory创建新的线程。默认使用Executors.defaultThreadFactory作为线程工厂。
+ * 通过自定义不同的 ThreadFactory，我们可以指定线程名，线程组，优先级，守护线程状态等。
+ * 如果ThreadFactory创建线程失败，线程池会继续运行，但是可能不会继续执行任务。
+ * 如果工作线程或其他线程使用了没有许可(RuntimePermission)的线程池，服务可能会被降级：
+ * 修改配置可能不会及时生效，并且在关闭池(shutdown)之后可能仍然处于一个不完全终止的状态。
  *
  * <dt>Keep-alive times</dt>
  *
@@ -130,25 +151,35 @@ import java.util.*;
  * method {@link #allowCoreThreadTimeOut(boolean)} can be used to
  * apply this time-out policy to core threads as well, so long as the
  * keepAliveTime value is non-zero. </dd>
+ * 如果当前线程数多于核心线程，如果线程空闲时间超出 keepAliveTime，过量的线程将被销毁。
+ * 这提供了一种减少资源占用的机制。keepAliveTime也可以通过setKeepAliveTime来动态的修改。
+ * 默认情况下，保活策略只有对大于核心线程数的线程时候才会适用。
+ * 通过allowCoreThreadTimeOut也可以为核心线程设置保活策略。
+ *
  *
  * <dt>Queuing</dt>
  *
  * <dd>Any {@link BlockingQueue} may be used to transfer and hold
  * submitted tasks.  The use of this queue interacts with pool sizing:
+ * 任何阻塞队列都可以用来转移或持有提交的任务，线程池大小和阻塞队列互相影响：
  *
  * <ul>
  *
  * <li> If fewer than corePoolSize threads are running, the Executor
  * always prefers adding a new thread
  * rather than queuing.</li>
+ * 如果运行线程数小于corePoolSize，提交新任务时就会新建一个线程来运行。
  *
  * <li> If corePoolSize or more threads are running, the Executor
  * always prefers queuing a request rather than adding a new
  * thread.</li>
+ * 如果运行线程数大于或等于corePoolSize，新提交的任务就会入列等待。
  *
  * <li> If a request cannot be queued, a new thread is created unless
  * this would exceed maximumPoolSize, in which case, the task will be
  * rejected.</li>
+ * 如果队列已满，并且运行线程数小于最大线程数(maximumPoolSize)，也将会新建一个线程来运行；
+ * 如果线程数大于maximumPoolSize，新提交的任务将会根据拒绝策略来处理。
  *
  * </ul>
  *
@@ -1631,7 +1662,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
      * @return {@code true} if a thread was started
      */
     /**
-     * 启动一个核心线程等待新任务，这将覆盖只在执行新任务时启动核心线程
+     * 启动一个核心线程等待新任务。这将覆盖只在执行新任务时启动核心线程
      * 的默认策略。如果所有核心线程都已经开启，返回false
      */
     public boolean prestartCoreThread() {
