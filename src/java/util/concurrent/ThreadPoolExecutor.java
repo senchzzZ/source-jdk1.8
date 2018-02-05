@@ -161,7 +161,7 @@ import java.util.*;
  *
  * <dd>Any {@link BlockingQueue} may be used to transfer and hold
  * submitted tasks.  The use of this queue interacts with pool sizing:
- * 任何阻塞队列都可以用来转移或持有提交的任务，线程池大小和阻塞队列互相影响：
+ * 任何阻塞队列都可以用来转移或保存提交的任务，线程池大小和阻塞队列互相影响：
  *
  * <ul>
  *
@@ -196,6 +196,11 @@ import java.util.*;
  * avoid rejection of new submitted tasks. This in turn admits the
  * possibility of unbounded thread growth when commands continue to
  * arrive on average faster than they can be processed.  </li>
+ * 直接传递：通过SynchronousQueue直接把任务传递给线程。如果当前没可用线程，尝试入队操作会失败，
+ * 然后再创建一个新的线程。当处理可能具有内部依赖性的请求时，该策略会避免请求被锁定。
+ * 直接传递通常需要无界的最大线程数，避免拒绝新提交的任务。
+ * 反过来，当任务持续到达的平均速度超过可处理的速度时，就可能导致线程的无限增长。
+ *
  *
  * <li><em> Unbounded queues.</em> Using an unbounded queue (for
  * example a {@link LinkedBlockingQueue} without a predefined
@@ -209,6 +214,11 @@ import java.util.*;
  * transient bursts of requests, it admits the possibility of
  * unbounded work queue growth when commands continue to arrive on
  * average faster than they can be processed.  </li>
+ * 无界队列：使用无界队列（如LinkedBlockingQueue）作为等待队列，当所有的核心线程都在处理任务时，
+ * 新提交的任务都会进入队列等待。因此，不会有大于corePoolSize的线程会被创建（maximumPoolSize也将失去作用）。
+ * 这种策略适合每个任务都完全独立于其他任务的情况；例如网站服务器。
+ * 这种类型的等待队列可以使瞬间爆发的高频请求变得平滑。
+ * 当任务持续到达的平均速度超过可处理速度时，可能导致等待队列无限增长。
  *
  * <li><em>Bounded queues.</em> A bounded queue (for example, an
  * {@link ArrayBlockingQueue}) helps prevent resource exhaustion when
@@ -222,6 +232,11 @@ import java.util.*;
  * generally requires larger pool sizes, which keeps CPUs busier but
  * may encounter unacceptable scheduling overhead, which also
  * decreases throughput.  </li>
+ * 有界队列：当使用有限的最大线程数时，有界队列（如ArrayBlockingQueue）可以防止资源耗尽，但是难以调整和控制。
+ * 队列大小和最大线程数可以相互作用：使用大的队列和小的线程数可以减少CPU使用率、系统资源和上下文切换的开销，
+ * 但是会导致吞吐量变低，如果任务频繁地阻塞（例如被I/O限制），系统能为更多的线程调度执行时间。
+ * 使用小的队列通常需要更多的线程数，这样可以最大化CPU使用率，但可能会需要更大的调度开销，从而降低吞吐量。
+ *
  *
  * </ol>
  *
