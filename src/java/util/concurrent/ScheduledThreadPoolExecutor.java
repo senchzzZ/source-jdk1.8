@@ -178,14 +178,14 @@ public class ScheduledThreadPoolExecutor
     /**
      * True if ScheduledFutureTask.cancel should remove from queue
      */
-    //取消任务后移除
+    //任务取消后从等待队列中移除
     private volatile boolean removeOnCancel = false;
 
     /**
      * Sequence number to break scheduling ties, and in turn to
      * guarantee FIFO order among tied entries.
      */
-    //为中断调度关系提供的顺序编号，保证在被绑定的entry之间的FIFO顺序
+    //为相同延时的任务提供的顺序编号，保证任务之间的FIFO顺序
     private static final AtomicLong sequencer = new AtomicLong();
 
     /**
@@ -195,14 +195,16 @@ public class ScheduledThreadPoolExecutor
         return System.nanoTime();
     }
 
+    //周期任务
     private class ScheduledFutureTask<V>
             extends FutureTask<V> implements RunnableScheduledFuture<V> {
 
         /** Sequence number to break ties FIFO */
+        //为相同延时任务提供的顺序编号
         private final long sequenceNumber;
 
         /** The time the task is enabled to execute in nanoTime units */
-        //任务可以执行时的时间，纳秒级
+        //任务可以执行的时间，纳秒级
         private long time;
 
         /**
@@ -211,11 +213,11 @@ public class ScheduledThreadPoolExecutor
          * indicates fixed-delay execution.  A value of 0 indicates a
          * non-repeating task.
          */
-        //在纳秒内重复任务。正数表示固定比率执行，负数表示固定延迟执行，0表示不重复任务
+        //重复任务的执行周期时间，纳秒级。正数表示固定速率执行，负数表示固定延迟执行，0表示不重复任务
         private final long period;
 
         /** The actual task to be re-enqueued by reExecutePeriodic */
-        //真实的任务，由reExecutePeriodic方法重新排列
+        //重新入队的任务
         RunnableScheduledFuture<V> outerTask = this;
 
         /**
@@ -227,6 +229,7 @@ public class ScheduledThreadPoolExecutor
         /**
          * Creates a one-shot action with given nanoTime-based trigger time.
          */
+        //创建一个一次性执行的延时任务Runnable
         ScheduledFutureTask(Runnable r, V result, long ns) {
             super(r, result);
             this.time = ns;
@@ -237,6 +240,7 @@ public class ScheduledThreadPoolExecutor
         /**
          * Creates a periodic action with given nano time and period.
          */
+        //创建一个周期执行的延时任务
         ScheduledFutureTask(Runnable r, V result, long ns, long period) {
             super(r, result);
             this.time = ns;
@@ -247,17 +251,18 @@ public class ScheduledThreadPoolExecutor
         /**
          * Creates a one-shot action with given nanoTime-based trigger time.
          */
+        //创建一个一次性执行的延时任务Callable
         ScheduledFutureTask(Callable<V> callable, long ns) {
             super(callable);
             this.time = ns;
             this.period = 0;
             this.sequenceNumber = sequencer.getAndIncrement();
         }
-
+        //获取任务延迟时间
         public long getDelay(TimeUnit unit) {
             return unit.convert(time - now(), NANOSECONDS);
         }
-
+        //任务排队顺序比较
         public int compareTo(Delayed other) {
             if (other == this) // compare zero if same object
                 return 0;
@@ -309,7 +314,7 @@ public class ScheduledThreadPoolExecutor
         /**
          * Overrides FutureTask version so as to reset/requeue if periodic.
          */
-        //重写FutureTask的版本，以便在周期性的情况下重置/重排序
+        //重写FutureTask的版本，以便在周期性的情况下重置/重排序任务
         public void run() {
             boolean periodic = isPeriodic();//是否为周期任务
             if (!canRunInCurrentRunState(periodic))//当前状态是否可以执行
@@ -330,6 +335,7 @@ public class ScheduledThreadPoolExecutor
      *
      * @param periodic true if this task periodic, false if delayed
      */
+    //关闭（shutdown）之后是否可以继续执行任务
     boolean canRunInCurrentRunState(boolean periodic) {
         return isRunningOrShutdown(periodic ?
                                    continueExistingPeriodicTasksAfterShutdown :

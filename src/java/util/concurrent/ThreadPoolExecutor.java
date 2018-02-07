@@ -1574,10 +1574,10 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
         final ReentrantLock mainLock = this.mainLock;
         mainLock.lock();
         try {
-            checkShutdownAccess();
-            advanceRunState(STOP);
+            checkShutdownAccess();//检查关闭权限
+            advanceRunState(STOP);//修改运行状态runState
             interruptWorkers();//中断所有线程
-            tasks = drainQueue();
+            tasks = drainQueue();//移除所有等待队列的任务
         } finally {
             mainLock.unlock();
         }
@@ -1616,12 +1616,12 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
         final ReentrantLock mainLock = this.mainLock;
         mainLock.lock();
         try {
-            for (;;) {
+            for (;;) {//自旋等待任务完成或超时
                 if (runStateAtLeast(ctl.get(), TERMINATED))
                     return true;
                 if (nanos <= 0)
                     return false;
-                nanos = termination.awaitNanos(nanos);
+                nanos = termination.awaitNanos(nanos);//todo 等待给定时间
             }
         } finally {
             mainLock.unlock();
