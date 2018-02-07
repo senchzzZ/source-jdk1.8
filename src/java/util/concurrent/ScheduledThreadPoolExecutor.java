@@ -53,6 +53,7 @@ import java.util.*;
  * enabled, they will commence. Tasks scheduled for exactly the same
  * execution time are enabled in first-in-first-out (FIFO) order of
  * submission.
+ * 相同延时时间的任务按照FIFO顺序执行。
  *
  * <p>When a submitted task is cancelled before it is run, execution
  * is suppressed. By default, such a cancelled task is not
@@ -62,6 +63,10 @@ import java.util.*;
  * this, set {@link #setRemoveOnCancelPolicy} to {@code true}, which
  * causes tasks to be immediately removed from the work queue at
  * time of cancellation.
+ * 当一个已经提交的任务在运行之前被取消，任务将被取消运行。默认配置下，这种已经取消的任务在延时未到之前不会被移除。
+ * 通过这种机制，我们可以更进一步的检查和检测线程池，但可能导致已取消任务的无限制滞留。
+ * 为了避免这种情况的发生，我们可以通过setRemoveOnCancelPolicy设置移除策略，
+ * removeOnCancel设为true可以在任务取消后立即从队列中移除任务。
  *
  * <p>Successive executions of a task scheduled via
  * {@code scheduleAtFixedRate} or
@@ -130,23 +135,32 @@ public class ScheduledThreadPoolExecutor
      *    those submitted using ExecutorService execute, not
      *    ScheduledExecutorService methods) which are treated as
      *    delayed tasks with a delay of zero.
+     *    使用一种订制的任务类型—ScheduledFutureTask来执行周期任务，
+     *    也可以接收不需要时间调度的任务（这些任务通过ExecutorService来执行）。
      *
      * 2. Using a custom queue (DelayedWorkQueue), a variant of
      *    unbounded DelayQueue. The lack of capacity constraint and
      *    the fact that corePoolSize and maximumPoolSize are
      *    effectively identical simplifies some execution mechanics
      *    (see delayedExecute) compared to ThreadPoolExecutor.
+     *    使用了一种订制的存储队列—DelayedWorkQueue，是无界延迟队列DelayQueue的一种。
+     *    todo 容量约束的缺乏和corePoolSize和maximumPoolSize实际上是相同的，
+     *    相比ThreadPoolExecutor简化了执行机制(参见 delayedExecute)。
      *
      * 3. Supporting optional run-after-shutdown parameters, which
      *    leads to overrides of shutdown methods to remove and cancel
      *    tasks that should NOT be run after shutdown, as well as
      *    different recheck logic when task (re)submission overlaps
      *    with a shutdown.
+     *    支持可选的run-after-shutdown参数，重写了shutdown方法来移除或取消不应该在关闭之后继续运行的任务。
+     *    并且当任务(重新)提交操作与shutdown操作重叠时，也可用来进行重新检查逻辑。
      *
      * 4. Task decoration methods to allow interception and
      *    instrumentation, which are needed because subclasses cannot
      *    otherwise override submit methods to get this effect. These
      *    don't have any impact on pool control logic though.
+     *    任务装饰方法允许截取和插装，因为子类不能额外重写submit方法来得到这个效果。
+     *    这不会对池的控制逻辑产生影响。
      */
 
     /**
@@ -336,7 +350,7 @@ public class ScheduledThreadPoolExecutor
     /**任务延迟或周期执行的主方法。如果池已经关闭，根据指定策略拒绝给定任务，
      * 否则添加给定任务到队列，并且开启一个线程。（由于给定任务可能还不能被运行，
      * 所以我们不能预先启动线程来运行任务）。如果在任务添加期间池被关闭，
-     * 根据池状态和run-after-shutdown参数决定取消和移除任务。
+     * 根据池状态和run-after-shutdown参数决定取消或移除任务。
      */
     private void delayedExecute(RunnableScheduledFuture<?> task) {
         if (isShutdown())

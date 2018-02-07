@@ -49,8 +49,14 @@ package java.util.concurrent;
  * of cancellability but not provide a usable result, you can
  * declare types of the form {@code Future<?>} and
  * return {@code null} as a result of the underlying task.
- * 表示一个任务的生命周期，并提供了响应的方法来判断是否已经完成或取消，
+ * 表示一个任务的生命周期，并提供了相应的方法来判断是否已经完成或取消，
  * 以及获取任务的结果和取消任务等。
+ * 任务计算结果只能通过get方法获取，如果任务没有完成则会一直等待。
+ * 通过cancel方法来取消任务。此外还提供确定任务是否正常完成的方法，
+ * 任务一旦完成，就不能再取消。如果我们只需要利用Future的可取消性而不需要返回值，
+ * 只需要声明Future<?>的返回值类型为null。
+ *
+ *
  *
  * <p>
  * <b>Sample Usage</b> (Note that the following classes are all

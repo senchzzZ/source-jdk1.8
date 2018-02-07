@@ -340,7 +340,7 @@ public class PriorityQueue<E> extends AbstractQueue<E>
             grow(i + 1);
         size = i + 1;
         if (i == 0)
-            //队列元素数为0直接添加
+            //队列元素数为0时直接添加
             queue[0] = e;
         else
             //通过comparator找到合适位置添加

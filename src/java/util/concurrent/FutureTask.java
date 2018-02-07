@@ -101,10 +101,10 @@ public class FutureTask<V> implements RunnableFuture<V> {
     private static final int INTERRUPTED  = 6;//已中断
 
     /** The underlying callable; nulled out after running */
-    //底层调用，运行完毕后置空
+    //内部持有的callable任务，运行完毕后置空
     private Callable<V> callable;
     /** The result to return or exception to throw from get() */
-    //从get()中抛出或返回的异常
+    //从get()中返回的结果或抛出的异常
     private Object outcome; // non-volatile, protected by state reads/writes
     /** The thread running the callable; CASed during run() */
     //运行callable线程，在run()期间保持原子性
@@ -169,12 +169,13 @@ public class FutureTask<V> implements RunnableFuture<V> {
     }
 
     public boolean cancel(boolean mayInterruptIfRunning) {
+        //如果当前Future状态为NEW，根据参数修改Future状态为INTERRUPTING或CANCELLED
         if (!(state == NEW &&
               UNSAFE.compareAndSwapInt(this, stateOffset, NEW,
                   mayInterruptIfRunning ? INTERRUPTING : CANCELLED)))
             return false;
         try {    // in case call to interrupt throws exception
-            if (mayInterruptIfRunning) {
+            if (mayInterruptIfRunning) {//可以在运行时中断
                 try {
                     Thread t = runner;
                     if (t != null)
@@ -262,7 +263,7 @@ public class FutureTask<V> implements RunnableFuture<V> {
     }
 
     public void run() {
-        //新建任务，CAS替换为当前线程
+        //新建任务，CAS替换runner为当前线程
         if (state != NEW ||
             !UNSAFE.compareAndSwapObject(this, runnerOffset,
                                          null, Thread.currentThread()))
@@ -341,11 +342,13 @@ public class FutureTask<V> implements RunnableFuture<V> {
     /**
      * Ensures that any interrupt from a possible cancel(true)
      * is only delivered to a task while in run or runAndReset.
+     * 确保任何可能的方法的中断只在run或runAndReset时传递到任务中。
      */
-    //确保调用cancel(true)时的任何中断只在run或runAndReset传递到task中
+    //确保任何中断（例如`cancel(true)`）只停留在当前run或runAndReset的任务中
     private void handlePossibleCancellationInterrupt(int s) {
         // It is possible for our interrupter to stall before getting a
         // chance to interrupt us.  Let's spin-wait patiently.
+        //在中断者中断线程之前可能会延迟，所以我们只需要让出CPU时间片自旋等待
         if (s == INTERRUPTING)
             while (state == INTERRUPTING)
                 Thread.yield(); // wait out pending interrupt
@@ -462,9 +465,10 @@ public class FutureTask<V> implements RunnableFuture<V> {
     //移除超时或已中断的等待节点
     private void removeWaiter(WaitNode node) {
         if (node != null) {
-            node.thread = null;
+            node.thread = null;//首先置空线程
             retry:
             for (;;) {          // restart on removeWaiter race
+                //依次遍历查找
                 for (WaitNode pred = null, q = waiters, s; q != null; q = s) {
                     s = q.next;
                     if (q.thread != null)
@@ -475,7 +479,7 @@ public class FutureTask<V> implements RunnableFuture<V> {
                             continue retry;
                     }
                     else if (!UNSAFE.compareAndSwapObject(this, waitersOffset,
-                                                          q, s))
+                                                          q, s))//cas替换
                         continue retry;
                 }
                 break;
