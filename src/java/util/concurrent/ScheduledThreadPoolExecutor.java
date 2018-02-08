@@ -884,8 +884,8 @@ public class ScheduledThreadPoolExecutor
      * it can only hold RunnableScheduledFutures.
      */
     /**
-     * 专门的延迟队列。为了与ThreadPoolExecutor相契合，这个类必须声明
-     * 为一个BlockingQueue<Runnable>，只能存放RunnableScheduledFuture
+     * 专门的延迟队列。为了与 ThreadPoolExecutor 相契合，这个类必须声明
+     * 为一个BlockingQueue<Runnable>，只能存放 RunnableScheduledFuture
      */
     static class DelayedWorkQueue extends AbstractQueue<Runnable>
         implements BlockingQueue<Runnable> {
