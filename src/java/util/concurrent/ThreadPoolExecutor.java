@@ -447,7 +447,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
      *
      * Threads waiting in awaitTermination() will return when the
      * state reaches TERMINATED.
-     * 在awaitTermination上等待的线程将会在池变为TERMINATED后返回。
+     * 当池状态变为TERMINATED，在awaitTermination方法中等待的线程将会返回。
      *
      * Detecting the transition from SHUTDOWN to TIDYING is less
      * straightforward than you'd like because the queue may become
@@ -1541,7 +1541,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
             checkShutdownAccess();//检查关闭权限
             advanceRunState(SHUTDOWN);//修改运行状态runState
             interruptIdleWorkers();//中断空闲工作线程
-            //为ScheduledThreadPoolExecutor提供的关闭钩子
+            //关闭钩子
             onShutdown(); // hook for ScheduledThreadPoolExecutor
         } finally {
             mainLock.unlock();

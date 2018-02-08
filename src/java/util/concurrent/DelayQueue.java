@@ -90,10 +90,10 @@ public class DelayQueue<E extends Delayed> extends AbstractQueue<E>
      * waiting thread, but not necessarily the current leader, is
      * signalled.  So waiting threads must be prepared to acquire
      * and lose leadership while waiting.
-     * 等待获取队列头元素的线程，主从式设计，减少不必要的等待。当一个线程为leader，它将会等待下一个延迟期满，
-     * 但是其他线程的等待是不确定的。在一个线程从take()或poll()获取数据返回前，leader必须唤醒其他等待的线程，
+     * 等待获取队列头元素的线程，主从式设计，减少不必要的等待。当一个线程为leader，它只会等待下一个延迟届期，
+     * 但是其他线程的等待是不确定的。在从take()或poll()获取数据返回前，leader 线程必须唤醒其他等待的线程，
      * 除非其他线程在这期间变成leader。如果队列头被一个有着更快过期时间的元素替换掉，leader将会被设置为null而失效，
-     * 并唤醒其他等待线程（不一定是当前leader线程）。所以等待线程在等待期间必须时刻准备获取并失去leader权限。
+     * 并唤醒其他等待线程（不一定是当前leader线程）。所以等待线程在等待期间必须时刻准备获取或失去leader权限。
      */
     private Thread leader = null;
 
@@ -101,6 +101,9 @@ public class DelayQueue<E extends Delayed> extends AbstractQueue<E>
      * Condition signalled when a newer element becomes available
      * at the head of the queue or a new thread may need to
      * become leader.
+     */
+    /**
+     * 当一个新任务在队列的头部可用，或者新线程可能需要成为leader时，唤醒等待条件
      */
     private final Condition available = lock.newCondition();
 

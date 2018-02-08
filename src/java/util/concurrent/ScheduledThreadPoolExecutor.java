@@ -439,8 +439,8 @@ public class ScheduledThreadPoolExecutor
      * @return a task that can execute the runnable
      * @since 1.6
      */
-    /**修改或替换用于执行runnable的任务。此方法可被具体的类重载
-     * 来管理内部任务。默认实现返回给定task
+    /**
+     * 修改或替换用于执行runnable的任务。此方法可被重写来管理内部任务。默认实现下返回给定task
      */
     protected <V> RunnableScheduledFuture<V> decorateTask(
         Runnable runnable, RunnableScheduledFuture<V> task) {
@@ -459,8 +459,8 @@ public class ScheduledThreadPoolExecutor
      * @return a task that can execute the callable
      * @since 1.6
      */
-    /**修改或替换用于执行callable的任务。此方法可被具体的类重载
-     * 来管理内部任务。默认实现返回给定task
+    /**
+     * 修改或替换用于执行callable的任务。此方法可被重写来管理内部任务。默认实现返回给定task
      */
     protected <V> RunnableScheduledFuture<V> decorateTask(
         Callable<V> callable, RunnableScheduledFuture<V> task) {
@@ -558,9 +558,9 @@ public class ScheduledThreadPoolExecutor
      * not yet been, while some other task is added with a delay of
      * Long.MAX_VALUE.
      */
-    /**限制队列中所有延迟的值在Long.MAX_VALUE以内,避免在compareTo时溢出。
-     * 如果一个任务有资格但还没有出队，
-     * 而另一个任务被添加延迟为Long.MAX_VALUE，则可能发生溢出情况
+    /**
+     * 限制队列中所有延迟的值在Long.MAX_VALUE以内,避免在compareTo时溢出。
+     * 如果一个任务有资格但还没有出队，而另一个任务被添加延迟为Long.MAX_VALUE，则可能发生溢出情况
      */
     private long overflowFree(long delay) {
         Delayed head = (Delayed) super.getQueue().peek();
@@ -617,7 +617,7 @@ public class ScheduledThreadPoolExecutor
      */
     /**
      * 创建一个周期执行的任务，第一次执行延期时间为initialDelay，
-     * 之后每隔period执行一次
+     * 之后每隔period执行一次，不等待第一次执行完成就开始计时
      * */
     public ScheduledFuture<?> scheduleAtFixedRate(Runnable command,
                                                   long initialDelay,
@@ -727,9 +727,10 @@ public class ScheduledThreadPoolExecutor
      * @param value if {@code true}, continue after shutdown, else don't
      * @see #getContinueExistingPeriodicTasksAfterShutdownPolicy
      */
-    /**设置run-after-shutdown参数值
-     * 假使为true，这些任务只会在shutdownNow中终止，
-     * 或者在已经关闭时将策略设置为false。
+    /**
+     * 设置run-after-shutdown参数值
+     * 如果为true，任务只会在调用shutdownNow时终止；
+     * 如果池已经关闭，在设置这个值为false时也会终止
      */
     public void setContinueExistingPeriodicTasksAfterShutdownPolicy(boolean value) {
         continueExistingPeriodicTasksAfterShutdown = value;
@@ -932,13 +933,11 @@ public class ScheduledThreadPoolExecutor
          * signalled.  So waiting threads must be prepared to acquire
          * and lose leadership while waiting.
          */
-        /**指定在队列头部等待任务的线程
-         * 这种主从模式的变体可以最小化不必要的时间等待，当一个线程变成leader时，
-         * 它只等待下一个延迟，但是其他线程则无期限等待。leader线程必须在从take()
-         * 或poll()返回之前唤醒其他线程，除非其他线程在这期间变成leader。当队列
-         * 头被使用较早过期时间的任务替换时,通过重置为null使leader字段无效，并且
-         * 唤醒其他等待线程（非当前leader）。所以等待线程在等待期间必须准备好
-         * 去获取和失去leadership
+        /**
+         * 等待获取队列头元素的线程，主从式设计，减少不必要的等待。当一个线程为leader，它只会等待下一个延迟届期，
+         * 但是其他线程的等待是不确定的。在从take()或poll()获取数据返回前，leader 线程必须唤醒其他等待的线程，
+         * 除非其他线程在这期间变成leader。如果队列头被一个有着更快过期时间的元素替换掉，leader将会被设置为null而失效，
+         * 并唤醒其他等待线程（不一定是当前leader线程）。所以等待线程在等待期间必须时刻准备获取或失去leader权限。
          */
         private Thread leader = null;
 
@@ -954,7 +953,7 @@ public class ScheduledThreadPoolExecutor
         /**
          * Sets f's heapIndex if it is a ScheduledFutureTask.
          */
-        //设置任务在堆里的index
+        //设置任务在堆里的索引
         private void setIndex(RunnableScheduledFuture<?> f, int idx) {
             if (f instanceof ScheduledFutureTask)
                 ((ScheduledFutureTask)f).heapIndex = idx;
@@ -1011,7 +1010,7 @@ public class ScheduledThreadPoolExecutor
         /**
          * Resizes the heap array.  Call only when holding lock.
          */
-        //扩容
+        //扩容 原来容量的1.5倍
         private void grow() {
             int oldCapacity = queue.length;
             int newCapacity = oldCapacity + (oldCapacity >> 1); // grow 50%
