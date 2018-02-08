@@ -85,7 +85,9 @@ import java.util.*;
  * use {@code allowCoreThreadTimeOut} because this may leave the pool
  * without threads to handle tasks once they become eligible to run.
  * 虽然继承了ThreadPoolExecutor，有部分调优策略却不适用。
- * 例如，由于STPE是一个固定核心线程数大小的线程池，并且使用了一个无界队列，
+ * 例如，由于STPE是一个固定核心线程数大小的线程池，并且使用了一个无界队列，所以调整maximumPoolSize对其没有任何影响。
+ * 此外，设置corePoolSize为0或者设置核心线程空闲后清除（allowCoreThreadTimeOut）同样也不是一个好的策略，
+ * 因为一旦周期任务到达某一次运行周期时，可能导致线程池内没有线程去处理这些任务。
  *
  *
  * <p><b>Extension notes:</b> This class overrides the
@@ -147,7 +149,6 @@ public class ScheduledThreadPoolExecutor
      *    effectively identical simplifies some execution mechanics
      *    (see delayedExecute) compared to ThreadPoolExecutor.
      *    使用了一种订制的存储队列—DelayedWorkQueue，是无界延迟队列DelayQueue的一种。
-     *    todo 容量约束的缺乏和corePoolSize和maximumPoolSize实际上是相同的，
      *    相比ThreadPoolExecutor简化了执行机制(参见 delayedExecute)。
      *
      * 3. Supporting optional run-after-shutdown parameters, which
@@ -155,8 +156,8 @@ public class ScheduledThreadPoolExecutor
      *    tasks that should NOT be run after shutdown, as well as
      *    different recheck logic when task (re)submission overlaps
      *    with a shutdown.
-     *    支持可选的run-after-shutdown参数，重写了shutdown方法来移除或取消不应该在关闭之后继续运行的任务。
-     *    并且当任务(重新)提交操作与shutdown操作重叠时，也可用来进行重新检查逻辑。
+     *    支持可选的run-after-shutdown参数，在池被关闭（shutdown）之后支持可选的逻辑来决定是否继续运行周期或延迟任务。
+     *    并且当任务(重新)提交操作与shutdown操作重叠时，复查逻辑也不相同。
      *
      * 4. Task decoration methods to allow interception and
      *    instrumentation, which are needed because subclasses cannot
