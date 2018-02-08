@@ -84,6 +84,9 @@ import java.util.*;
  * is almost never a good idea to set {@code corePoolSize} to zero or
  * use {@code allowCoreThreadTimeOut} because this may leave the pool
  * without threads to handle tasks once they become eligible to run.
+ * 虽然继承了ThreadPoolExecutor，有部分调优策略却不适用。
+ * 例如，由于STPE是一个固定核心线程数大小的线程池，并且使用了一个无界队列，
+ *
  *
  * <p><b>Extension notes:</b> This class overrides the
  * {@link ThreadPoolExecutor#execute(Runnable) execute} and
