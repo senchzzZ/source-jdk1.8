@@ -107,6 +107,13 @@ import java.util.*;
  * {@code ScheduledThreadPoolExecutor} uses a task type extending
  * {@link FutureTask}. However, this may be modified or replaced using
  * subclasses of the form:
+ * STPE 重写了execute和submit方法，主要是用来把任务转化为STPE可以执行的ScheduledFuture任务类型，
+ * 以此来控制每个任务的延迟和周期。为了保证功能的完整性，这些方法任何自定义重写函数都要调用父类的方法，
+ * 也可以有效地减少额外的定制化任务。STPE 也提供了额外的可扩展方法decorateTask，
+ * 用户可重写此方法把Runnable/Callable任务修改为自定义的RunnableScheduledFuture任务。
+ *
+ *
+ *
  *
  *  <pre> {@code
  * public class CustomScheduledExecutor extends ScheduledThreadPoolExecutor {
@@ -163,7 +170,7 @@ public class ScheduledThreadPoolExecutor
      *    instrumentation, which are needed because subclasses cannot
      *    otherwise override submit methods to get this effect. These
      *    don't have any impact on pool control logic though.
-     *    任务装饰方法允许截取和插装，因为子类不能额外重写submit方法来得到这个效果。
+     *    任务装饰方法（decorateTask）可以被重写，用来管理内部任务状态。
      *    这不会对池的控制逻辑产生影响。
      */
 
@@ -366,10 +373,10 @@ public class ScheduledThreadPoolExecutor
         if (isShutdown())
             reject(task);//池已关闭，执行拒绝策略
         else {
-            super.getQueue().add(task);
+            super.getQueue().add(task);//任务入队
             if (isShutdown() &&
-                !canRunInCurrentRunState(task.isPeriodic()) &&
-                remove(task))
+                !canRunInCurrentRunState(task.isPeriodic()) &&//判断run-after-shutdown参数
+                remove(task))//移除任务
                 task.cancel(false);
             else
                 ensurePrestart();//启动一个新的线程等待任务
@@ -609,8 +616,8 @@ public class ScheduledThreadPoolExecutor
             throw new NullPointerException();
         RunnableScheduledFuture<V> t = decorateTask(callable,
             new ScheduledFutureTask<V>(callable,
-                                       triggerTime(delay, unit)));
-        delayedExecute(t);
+                                       triggerTime(delay, unit)));//构造ScheduledFutureTask任务
+        delayedExecute(t);//任务执行主方法
         return t;
     }
 
@@ -631,14 +638,15 @@ public class ScheduledThreadPoolExecutor
             throw new NullPointerException();
         if (period <= 0)
             throw new IllegalArgumentException();
+        //构建RunnableScheduledFuture任务类型
         ScheduledFutureTask<Void> sft =
             new ScheduledFutureTask<Void>(command,
                                           null,
-                                          triggerTime(initialDelay, unit),
-                                          unit.toNanos(period));
-        RunnableScheduledFuture<Void> t = decorateTask(command, sft);
-        sft.outerTask = t;
-        delayedExecute(t);
+                                          triggerTime(initialDelay, unit),//计算任务的延迟时间
+                                          unit.toNanos(period));//计算任务的执行周期
+        RunnableScheduledFuture<Void> t = decorateTask(command, sft);//执行用户自定义逻辑
+        sft.outerTask = t;//赋值给outerTask，准备重新入队等待下一次执行
+        delayedExecute(t);//执行任务
         return t;
     }
 
@@ -659,14 +667,15 @@ public class ScheduledThreadPoolExecutor
             throw new NullPointerException();
         if (delay <= 0)
             throw new IllegalArgumentException();
+        //构建RunnableScheduledFuture任务类型
         ScheduledFutureTask<Void> sft =
             new ScheduledFutureTask<Void>(command,
                                           null,
-                                          triggerTime(initialDelay, unit),
-                                          unit.toNanos(-delay));
-        RunnableScheduledFuture<Void> t = decorateTask(command, sft);
-        sft.outerTask = t;
-        delayedExecute(t);
+                                          triggerTime(initialDelay, unit),//计算任务的延迟时间
+                                          unit.toNanos(-delay));//计算任务的执行周期
+        RunnableScheduledFuture<Void> t = decorateTask(command, sft);//执行用户自定义逻辑
+        sft.outerTask = t;//赋值给outerTask，准备重新入队等待下一次执行
+        delayedExecute(t);//执行任务
         return t;
     }
 
