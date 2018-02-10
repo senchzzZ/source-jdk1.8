@@ -309,10 +309,10 @@ public class ScheduledThreadPoolExecutor
         //设置下一次执行任务的时间
         private void setNextRunTime() {
             long p = period;
-            if (p > 0)
+            if (p > 0) //固定速率执行，scheduleAtFixedRate
                 time += p;
             else
-                time = triggerTime(-p);
+                time = triggerTime(-p);//固定延迟执行，scheduleWithFixedDelay
         }
         //取消任务
         public boolean cancel(boolean mayInterruptIfRunning) {
@@ -391,8 +391,9 @@ public class ScheduledThreadPoolExecutor
      */
     //重排序一个周期任务
     void reExecutePeriodic(RunnableScheduledFuture<?> task) {
-        if (canRunInCurrentRunState(true)) {
+        if (canRunInCurrentRunState(true)) {//池关闭后可继续执行
             super.getQueue().add(task);//任务入列
+            //重新检查run-after-shutdown参数，如果不能继续运行就移除队列任务，并取消任务的执行
             if (!canRunInCurrentRunState(true) && remove(task))
                 task.cancel(false);
             else
@@ -412,14 +413,14 @@ public class ScheduledThreadPoolExecutor
             getExecuteExistingDelayedTasksAfterShutdownPolicy();
         boolean keepPeriodic =
             getContinueExistingPeriodicTasksAfterShutdownPolicy();
-        if (!keepDelayed && !keepPeriodic) {
-            //遍历取消任务
+        if (!keepDelayed && !keepPeriodic) {//池关闭后不保留任务
+            //依次取消任务
             for (Object e : q.toArray())
                 if (e instanceof RunnableScheduledFuture<?>)
                     ((RunnableScheduledFuture<?>) e).cancel(false);
-            q.clear();//清除队列
+            q.clear();//清除等待队列
         }
-        else {
+        else {//池关闭后保留任务
             // Traverse snapshot to avoid iterator exceptions
             //遍历快照以避免迭代器异常
             for (Object e : q.toArray()) {
@@ -557,6 +558,7 @@ public class ScheduledThreadPoolExecutor
     /**
      * Returns the trigger time of a delayed action.
      */
+    //计算固定延迟任务的执行时间
     long triggerTime(long delay) {
         return now() +
             ((delay < (Long.MAX_VALUE >> 1)) ? delay : overflowFree(delay));

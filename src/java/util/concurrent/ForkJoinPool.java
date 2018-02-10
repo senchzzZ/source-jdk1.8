@@ -72,6 +72,11 @@ import java.security.Permissions;
  * when setting <em>asyncMode</em> to true in constructors, {@code
  * ForkJoinPool}s may also be appropriate for use with event-style
  * tasks that are never joined.
+ * 和其他线程池不同的是，它使用了work-stealing算法：
+ * 线程池内的所有线程都尝试找到并执行已经提交的任务，或者是被其他活动任务创建的子任务（如果不存在就阻塞等待）。
+ * 这种特性使得 ForkJoinPool 在运行多个可以产生子任务的任务，或者是提交的许多小任务时效率更高。
+ * 尤其是构建异步模型的 ForkJoinPool 时，对不必join的事件类型任务也非常适用。
+ *
  * <p>
  * <p>A static {@link #commonPool()} is available and appropriate for
  * most applications. The common pool is used by any ForkJoinTask that
@@ -79,7 +84,8 @@ import java.security.Permissions;
  * pool normally reduces resource usage (its threads are slowly
  * reclaimed during periods of non-use, and reinstated upon subsequent
  * use).
- * 在多数应用中，静态commonPool是可以共享的，使用common pool通常可以减少资源使用(它的线程在空闲一段时间后可以回收再使用)
+ * 在多数应用中，我们可以通过commonPool()方法构建一个所有ForkJoinTask共用的默认线程池，
+ * 使用common pool通常可以减少资源占用(因为它的线程在空闲一段时间后可以回收再使用)
  * <p>
  * <p>For applications that require separate or custom pools, a {@code
  * ForkJoinPool} may be constructed with a given target parallelism
@@ -91,6 +97,11 @@ import java.security.Permissions;
  * I/O or other unmanaged synchronization. The nested {@link
  * ManagedBlocker} interface enables extension of the kinds of
  * synchronization accommodated.
+ * 对于需要单独或自定义池的应用程序，我们可以自定义池的并行度，默认情况下，并行度等于CPU数。
+ * ForkJoinPool 可以根据需要自动管理工作线程，例如添加、挂起或恢复。
+ * 但是，在处理阻塞型IO或其他非托管型同步任务时，这种自动管理也不能保证绝对适用，
+ * 不过ForkJoinPool 定义了一个内部接口 ManagedBlocker，可以为这种类型的任务提供用户自定义扩展。
+ *
  * <p>
  * <p>In addition to execution and lifecycle control methods, this
  * class provides status check methods (for example
@@ -98,6 +109,9 @@ import java.security.Permissions;
  * tuning, and monitoring fork/join applications. Also, method
  * {@link #toString} returns indications of pool state in a
  * convenient form for informal monitoring.
+ * 除了任务执行和生命周期控制方法外，ForkJoinPool 还为开发者提供了监控池状态的方法（例如 getStealCount）。
+ * 不但如此，ForkJoinPool 的 toString 也会返回池内部某个时刻的所有状态信息。
+ *
  * <p>
  * <p>As is the case with other ExecutorServices, there are three
  * main task execution methods summarized in the following table.
@@ -110,6 +124,9 @@ import java.security.Permissions;
  * use the within-computation forms listed in the table unless using
  * async event-style tasks that are not usually joined, in which case
  * there is little difference among choice of methods.
+ * 与其他线程池一样，ForkJoinPool 提供了三种任务运行方法，这些方法只允许接收ForkJoinTask类型的任务，
+ * 我们也可以通过重载方式来执行一些自定义的任务。
+ *
  * <p>
  * <table BORDER CELLPADDING=3 CELLSPACING=1>
  * <caption>Summary of task execution methods</caption>
@@ -189,10 +206,10 @@ public class ForkJoinPool extends AbstractExecutorService {
      * their main rationale and descriptions are presented here;
      * individual methods and nested classes contain only brief
      * comments about details.
-     * ForkJoinPool和它的嵌套类为一组工作线程提供主要功能和控制：
+     * ForkJoinPool和它的内部类为一组工作线程提供主要功能和控制：
      * 非FJ线程任务放在submission queue，工作线程拿到这些任务并拆分为多个子任务，队列任务也可能被其他工作线程偷取。
-     * 工作线程优先处理来自自身队列的任务（LIFO或FIFO，参数mode决定），然后以FIFO方式随机在其他队列中窃取任务。
-     * 这个框架刚开始作为使用work-stealing模式支持树状结构并行的工具，随着时间的推移它的可伸缩性优势得到扩展和更改，
+     * 工作线程优先处理来自自身队列的任务（LIFO或FIFO，参数mode决定），然后以FIFO的顺序随机窃取其他队列中的任务。
+     * work-stealing框架在刚开始是为了支持树状结构并行操作，随着时间的推移它的可伸缩性优势得到扩展和优化，
      * 以更好地支持更多样化的使用。由于很多内部方法和嵌套类相互关联，它们的主要原理和描述都在下面展示；
      * 个别方法和嵌套类只包含关于细节的简短注释。
      *
@@ -221,9 +238,9 @@ public class ForkJoinPool extends AbstractExecutorService {
      * numbers of tasks. To accomplish this, we shift the CAS
      * arbitrating pop vs poll (steal) from being on the indices
      * ("base" and "top") to the slots themselves.
-     * 大多数操作都发生在work-stealing队列中(内嵌WorkQueue类)。
-     * 此workQueue支持三种形式的出列操作：push、pop、poll(也叫steal)，push和pop只能被队列内部持有的线程调用，poll被其他线程调用。
-     * 最大的不同来自于GC，我们一有机会就将队列的获取槽位置空，即使是在生成大量任务的程序中，也要保持尽可能小的占用空间。
+     * 大多数操作都发生在work-stealing队列中(内部类WorkQueue)。
+     * 此workQueue支持三种形式的出列操作：push、pop、poll(也叫steal)，push和pop只能被队列内部持有的线程调用，poll可被其他线程偷取任务时调用。
+     * 和最初的 Work-Stealing 队列不同，考虑到GC问题，我们一有机会就将队列的获取槽位置空，即使是在生成大量任务的程序中，也要保持尽可能小的占用空间。
      * 为了实现这一点，我们使用CAS解决pop和poll(steal)的线程冲突问题
      *
      * Adding tasks then takes the form of a classic array push(task):
@@ -282,13 +299,13 @@ public class ForkJoinPool extends AbstractExecutorService {
      * variants that try once at the apparent base index, else
      * consider alternative actions, rather than method poll, which
      * retries.)
-     * 由于使用了CAS，所以在队列base和top不必使用标志位，它们都是简单的int整数，可适用于所有循环的基于数组的队列。
+     * 由于使用了CAS引用数组，所以在队列base和top不必使用标志位。这些也是数组结构的队列的特性（例如ArrayDeque）。
      * 对索引的更新保证了当top==base时代表这个队列为空，但是如果在push、pop或poll没有完全完成的情况下，
-     * 可能出现即使base==top但队列为非空的错误情况（isEmpty方法可以检查 移除最后一个元素操作 部分完成的情况）。
-     * 所以，单独考虑poll操作，它并不是wait-free(无等待算法)。在一个线程正在偷取任务时，另外一个线程是无法完成偷取操作的。
-     * 大体上讲，我们确定起码有一定概率保证了阻塞性。如果一个偷取操作失败，偷取线程会选择另外一个随机目标继续尝试。
-     * 所以，一个偷取线程能够正常执行，它能够满足任何正在执行的对queue的poll或push操作（这就是为什么我们通常使用pollAt方法和它的变体，
-     * 在已知的base索引中先尝试一次，然后再考虑可替代的操作，而不使用可以重试的poll方法）
+     * 可能出现即使base==top但队列为非空的错误情况（isEmpty方法可以检查“移除最后一个元素操作”部分完成的情况）。
+     * 所以，单独考虑poll操作，它并不是wait-free的(无等待算法)。在一个线程正在偷取任务时，另外一个线程是无法完成偷取操作的。
+     * 大体上讲，我们起码有一定概率保证了阻塞性。如果一个偷取操作失败，偷取线程会选择另外一个随机目标继续尝试。
+     * 所以，为了保证偷取线程能够正常执行，它必须能够满足任何正在执行的对queue的poll或push操作都能完成
+     * （这就是为什么我们通常使用pollAt方法和它的变体，在已知的base索引中先尝试一次，然后再考虑可替代的操作，而不直接使用可以重试的poll方法）
      *
      * This approach also enables support of a user mode in which
      * local task processing is in FIFO, not LIFO order, simply by
@@ -307,12 +324,14 @@ public class ForkJoinPool extends AbstractExecutorService {
      * randomization of sufficient quality is used whenever
      * applicable.  Various Marsaglia XorShifts (some with different
      * shift constants) are inlined at use points.
-     * 这种方法同样也支持本地任务以FIFO模式运行，只需要使用poll而非pop。
-     * FIFO和LIFO这两种模式都不考虑共用性、加载、缓存地址等等，所以很少能在给定的机器上提供最好的性能，但通过对这些因素进行平均，
-     * 可以提供良好的吞吐量。更进一步来讲，即使我们尝试使用这些信息，也没有能利用它的基础。
-     * 例如，一些任务列表使用了缓存共用，但其他任务列表会因此受到它的影响。另外，即使它提供了扫描功能，
-     * 长远看来为了吞吐量通常最好使用随机选择，而非直接选择，因此，只要合适就会使用更加廉价的随机选择策略。
-     * 很多Marsaglia XorShifts(一种随机算法)(有些带有不同的偏移量)在使用上都是有联系的。
+     * 这种方法同样也支持本地任务（非join任务）以FIFO模式运行，只需要使用poll而非pop。
+     * FIFO和LIFO这两种模式都不会考虑共用性、加载、缓存地址等，所以很少能在给定的机器上提供最好的性能，
+     * 但通过对这些因素进行平均，可以提供良好的吞吐量。更进一步来讲，即使我们尝试使用这些信息，也没有能利用它的基础。
+     * 例如，一些任务集从缓存共用中获取到良好的性能收益，但其他任务集会因此受到它的影响。
+     * 另外，虽然队列中提供了扫描功能，但是从长远看来为了吞吐量通常最好使用随机选择，而非直接选择。
+     * 所以，在ForkJoinPool 中我们也就使用了一种 XorShifts 随机算法。
+     *
+     * 很多Marsaglia XorShifts(一种随机算法)(有些带有不同的偏移量)在使用上都是有关联的。
      *
      * WorkQueues are also used in a similar way for tasks submitted
      * to the pool. We cannot mix these tasks in the same queues used
@@ -332,13 +351,14 @@ public class ForkJoinPool extends AbstractExecutorService {
      * unlockable value (-1) at shutdown. Unlocking still can be and is
      * performed by cheaper ordered writes of "qlock" in successful
      * cases, but uses CAS in unsuccessful cases.
-     * WorkQueues对于提交到池中的任务也使用类似方式。我们不能把这些被工作线程使用的任务混合同一个队列中，
-     * 相反，我们会使用一种随机算法将提交到的队列与提交线程关联起来。
-     * ThreadLocalRandom的probe(探针值)会为选中的已存在的队列提供一个哈希值，在与其他提交者竞争时，probe也可能随机移位。
-     * 实质上，submitters就像worker一样，只不过他们被限制执行本地任务（CountedCompleter类型任务也不能执行）。
-     * 在共享模式里插入的任务需要锁来控制（在扩容情况下提供保护），我们只使用了 一个自旋锁(qlock实现)，
-     * 因为submitters遇到一个繁忙队列时会继续尝试提交或创建新的队列-在创建和注册新队列时阻塞。
-     * 另外，"qlock"会在shutdown时饱和到不可锁定值(-1)。解锁操作依然可以执行，在成功时通过写"qlock"执行，失败时使用CAS。
+     * WorkQueue 对于提交到池中的任务也使用类似的随机插入方式。我们不能把这些被工作线程使用的任务混合同一个队列中，
+     * 所以，我们会使用一种随机哈希算法（有点类似ConcurrentHashMap的随机算法）将工作队列与工作线程关联起来。
+     * ThreadLocalRandom的probe(探针值)会为选中的已存在的队列提供一个哈希值，在与其他提交任务的线程（submitters）竞争时，也可以利用probe来随机移位。
+     * 实际上，submitters 就像工作线程（worker）一样，只不过他们被限制只能执行它们提交的本地任务（CountedCompleter类型任务也不能执行）。
+     * 在共享模式里提交的任务需要锁来控制（在扩容情况下提供保护），我们使用了一个简单的自旋锁(qlock字段，后面详细讲解)，
+     * 因为 submitters 遇到一个繁忙队列时会继续尝试提交其他队列或创建新的队列-只有在 submitters 创建和注册新队列时阻塞。
+     * 另外，"qlock"会在shutdown时饱和到不可锁定值(-1)，但是解锁操作依然可以执行。
+     *
      *
      *
      * Management
@@ -357,11 +377,12 @@ public class ForkJoinPool extends AbstractExecutorService {
      * volatile variables that are by far most often read (not
      * written) as status and consistency checks. (Also, field
      * "config" holds unchanging configuration state.)
-     * work-stealing模式的吞吐量优势来自于分散控制-工作线程主要从它们自己队列或其他worker队列中获取任务，速度可以超过每秒十亿。
-     * 池本身的创建、激活(使其能够为运行中的任务提供扫描)、撤销、阻塞和销毁线程这些操作的的核心信息都很小。
+     *
+     * work-stealing模式的吞吐量优势来自于分散控制：工作线程主要从它们自己的队列或其他worker的队列中获取任务，速度可以超过每秒十亿。
+     * 池本身的创建、激活(为运行中的任务提供扫描功能)、撤销、阻塞和销毁线程这些操作的信息都很小，
      * 只有一小部分属性我们可以全局追踪或维护，所以我们把他们封装成一系列小的数字变量，并且这些变量通常是没有阻塞或锁定的原子数。
      * 几乎所有基本的原子控制状态都被保存在两个volatile变量中(ctl和runState)，
-     * 这两个变量常被用来读状态(非写)和检查一致性（同样，"config"字段持有了不可变的配置状态）。
+     * 这两个变量常被用来状态读取和一致性检查（此外，"config"字段持有了不可变的配置状态）。
      *
      * Field "ctl" contains 64 bits holding information needed to
      * atomically decide to add, inactivate, enqueue (on an event
@@ -371,7 +392,8 @@ public class ForkJoinPool extends AbstractExecutorService {
      * and their negations (used for thresholding) to fit into 16bit
      * subfields.
      * ctl定义为一个64位的原子类型字段，用来标识对工作线程进行添加、灭活、重新激活和对队列出列、入列操作。
-     * 使用了16位的parallelism（并行数）填充。
+     *
+     *
      *
      * Field "runState" holds lockable state bits (STARTED, STOP, etc)
      * also protecting updates to the workQueues array.  When used as
@@ -388,12 +410,11 @@ public class ForkJoinPool extends AbstractExecutorService {
      * internal Object to use as a monitor, the "stealCounter" (an
      * AtomicLong) is used when available (it too must be lazily
      * initialized; see externalSubmit).
-     * runState表示当前池的锁定的状态，同样也作为锁保护workQueues数组的更新。
-     * 当作为一个锁使用时，通常只被一部分操作持有(唯一的异常是数组进行一次性初始化和非常规扩容)，所以在最多一次自旋后总是处于可用状态。
-     * 需要注意的是，awaitRunStateLock方法(仅当使用CAS获取失败时调用)使用wait/notify机制来实现阻塞(这种情况很少)。
-     * 对于一个高度竞争的锁来说这是一个很不好的设计，但多数pool在自旋限制之后都是在无锁竞争情况下运行的，
-     * 所以作为一个保守的选择它运行的还是比较好的。因为我们没有内部对象作为监视器使用，
-     * 所以“stealCounter”(AtomicLong，也是在externalSubmit中延迟加载)充当了这个角色。
+     * runState 表示当前池的运行状态（STARTED、STOP等），同时也可作为锁保护workQueues数组的更新。
+     * 当作为一个锁使用时，通常只能被一部分操作持有(唯一的异常是数组进行一次性初始化和非常规扩容)，所以最多在一段自旋后总是处于可用状态。
+     * 需要注意的是，awaitRunStateLock 方法(仅当使用CAS获取失败时调用)在自旋一段时间之后，使用 wait/notify 机制来实现阻塞(这种情况很少)。
+     * 对于一个高竞争的锁来说这是一个很不好的设计，但多数pool在自旋限制之后都是在无锁竞争情况下运行的，所以作为一个保守的选择它运行的还是比较稳定的。
+     * 因为我们没有其他的内部对象作为监视器使用，所以“stealCounter”(AtomicLong，也是在externalSubmit中延迟加载)充当了这个角色。
      *
      *
      * Usages of "runState" vs "ctl" interact in only one case:
