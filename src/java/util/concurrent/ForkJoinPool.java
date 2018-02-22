@@ -536,7 +536,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      * WorkQueue fields (such as "currentSteal") that are only written
      * by owners but observed by others.
      *
-     * 由于我们必须时不时的唤醒某个工作线程，为了不会丢失signal信号指令，就需要更强的内存排序规则（full-fence）来避免指令重排序。
+     * 由于我们必须不定时的唤醒某个工作线程，为了不会丢失signal信号指令，就需要更强的内存排序规则（full-fence）来避免指令重排序。
      * 一些核心操作：如出列、更新ctl状态也需要full-fence来进行CAS操作。
      * 数组的读取则是使用Unsafe类提供的仿照volatile的方式。
      * 从其他线程访问 WorkQueue 的base、top和任务数组时，也需要保证首次读取的可见性，
