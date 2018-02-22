@@ -176,6 +176,8 @@ import java.lang.reflect.Constructor;
  * avoid revisiting nodes/tasks that have already been processed.
  * (Method names for tagging are bulky in part to encourage definition
  * of methods that reflect their usage patterns.)
+ * join方法只有当任务是“非循环的完成依赖关系”时才会适用，也就是说，并行计算可以通过一种“有向无环图”的运行方式完成。
+ * 否则的话，任务执行时可能会由于互相循环等待而导致死锁的发生。
  *
  * <p>Most base support methods are {@code final}, to prevent
  * overriding of implementations that are intrinsically tied to the
