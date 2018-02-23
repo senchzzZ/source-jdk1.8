@@ -98,6 +98,9 @@ import java.lang.reflect.Constructor;
  * for example using {@code ex.printStackTrace()}) of both the thread
  * that initiated the computation as well as the thread actually
  * encountering the exception; minimally only the latter.
+ * ForkJoinTask 是 Future 的轻量级实现，主要用在纯粹是计算的函数任务或者操作完全独立的对象计算任务。
+ * fork 是主运行方法，用于异步执行，而join方法在任务结果计算完毕之后才会运行。
+ *
  *
  * <p>It is possible to define and use ForkJoinTasks that may block,
  * but doing do requires three further considerations: (1) Completion

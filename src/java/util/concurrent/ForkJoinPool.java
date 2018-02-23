@@ -981,22 +981,22 @@ public class ForkJoinPool extends AbstractExecutorService {
 
     // Constants shared across ForkJoinPool and WorkQueue
 
-    // Bounds
-    static final int SMASK = 0xffff;        // short bits == max index
-    static final int MAX_CAP = 0x7fff;        // max #workers - 1
-    static final int EVENMASK = 0xfffe;        // even short bits
-    static final int SQMASK = 0x007e;        // max 64 (even) slots
+    // Bounds 限定参数
+    static final int SMASK = 0xffff;        // short bits == max index 低位掩码，也是最大索引位
+    static final int MAX_CAP = 0x7fff;        // max #workers - 1 工作线程最大容量
+    static final int EVENMASK = 0xfffe;        // even short bits 偶数低位掩码
+    static final int SQMASK = 0x007e;        // max 64 (even) slots 最多64个槽位
 
-    // Masks and units for WorkQueue.scanState and ctl sp subfield
-    static final int SCANNING = 1;             // false when running tasks
-    static final int INACTIVE = 1 << 31;       // must be negative
-    static final int SS_SEQ = 1 << 16;       // version count
+    // Masks and units for WorkQueue.scanState and ctl sp subfield ctl子域和WorkQueue.scanState的掩码和标志位
+    static final int SCANNING = 1;             // false when running tasks 当任务在运行时为false
+    static final int INACTIVE = 1 << 31;       // must be negative 负数
+    static final int SS_SEQ = 1 << 16;       // version count 版本戳，防止ABA问题
 
-    // Mode bits for ForkJoinPool.config and WorkQueue.config
-    static final int MODE_MASK = 0xffff << 16;  // top half of int
-    static final int LIFO_QUEUE = 0;
-    static final int FIFO_QUEUE = 1 << 16;
-    static final int SHARED_QUEUE = 1 << 31;       // must be negative
+    // Mode bits for ForkJoinPool.config and WorkQueue.config. ForkJoinPool.config和WorkQueue.config的模式标记位
+    static final int MODE_MASK = 0xffff << 16;  // top half of int 模式掩码
+    static final int LIFO_QUEUE = 0; //LIFO队列
+    static final int FIFO_QUEUE = 1 << 16;//FIFO队列
+    static final int SHARED_QUEUE = 1 << 31;       // must be negative 共享模式队列，负数
 
     /**
      * Queues supporting work-stealing as well as external task
@@ -1035,21 +1035,21 @@ public class ForkJoinPool extends AbstractExecutorService {
         //最大队列容量
         static final int MAXIMUM_QUEUE_CAPACITY = 1 << 26; // 64M
 
-        // Instance fields
+        // Instance fields 实例字段
         volatile int scanState;    // versioned, <0: inactive; odd:scanning
-        int stackPred;             // pool stack (ctl) predecessor
-        int nsteals;               // number of steals
-        int hint;                  // randomization and stealer index hint
-        int config;                // pool index and mode
+        int stackPred;             // pool stack (ctl) predecessor 前一个栈顶的ctl
+        int nsteals;               // number of steals 偷取任务数
+        int hint;                  // randomization and stealer index hint 偷取者索引
+        int config;                // pool index and mode 池索引和模式
         volatile int qlock;        // 1: locked, < 0: terminate; else 0
-        volatile int base;         // index of next slot for poll
-        int top;                   // index of next slot for push
-        ForkJoinTask<?>[] array;   // the elements (initially unallocated)
+        volatile int base;         // index of next slot for poll 下一个poll操作的索引
+        int top;                   // index of next slot for push 下一个push操作的索引
+        ForkJoinTask<?>[] array;   // the elements (initially unallocated) 任务数组
         final ForkJoinPool pool;   // the containing pool (may be null)
-        final ForkJoinWorkerThread owner; // owning thread or null if shared
-        volatile Thread parker;    // == owner during call to park; else null
-        volatile ForkJoinTask<?> currentJoin;  // task being joined in awaitJoin
-        volatile ForkJoinTask<?> currentSteal; // mainly used by helpStealer
+        final ForkJoinWorkerThread owner; // owning thread or null if shared 当前工作队列的工作线程，共享模式下为null
+        volatile Thread parker;    // == owner during call to park; else null 调用park阻塞期间为owner，其他情况为null
+        volatile ForkJoinTask<?> currentJoin;  // task being joined in awaitJoin 记录被join过来的任务
+        volatile ForkJoinTask<?> currentSteal; // mainly used by helpStealer 记录从其他工作队列偷取过来的任务
 
         WorkQueue(ForkJoinPool pool, ForkJoinWorkerThread owner) {
             this.pool = pool;
@@ -1625,7 +1625,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      * AC：正在运行工作线程数减去目标并行度
      * TC：总工作线程数减去目标并行度
      * SS：栈顶等待线程的版本计数和状态
-     * ID：栈顶等待线程的索引
+     * ID：栈顶等待线程在池中的索引（poolIndex）
      *
      * When convenient, we can extract the lower 32 stack top bits
      * (including version bits) as sp=(int)ctl.  The offsets of counts
@@ -1643,22 +1643,22 @@ public class ForkJoinPool extends AbstractExecutorService {
      * and masking, requiring CAS.
      */
 
-    // Lower and upper word masks
+    // Lower and upper word masks 高位和低位掩码
     private static final long SP_MASK = 0xffffffffL;
     private static final long UC_MASK = ~SP_MASK;
 
-    // Active counts
+    // Active counts 活跃线程数
     private static final int AC_SHIFT = 48;
     private static final long AC_UNIT = 0x0001L << AC_SHIFT;
     private static final long AC_MASK = 0xffffL << AC_SHIFT;
 
-    // Total counts
+    // Total counts 工作线程总数
     private static final int TC_SHIFT = 32;
     private static final long TC_UNIT = 0x0001L << TC_SHIFT;
     private static final long TC_MASK = 0xffffL << TC_SHIFT;
     private static final long ADD_WORKER = 0x0001L << (TC_SHIFT + 15); // sign
 
-    // runState bits: SHUTDOWN must be negative, others arbitrary powers of two
+    // runState bits: SHUTDOWN must be negative, others arbitrary powers of two 池状态
     private static final int RSLOCK = 1;
     private static final int RSIGNAL = 1 << 1;
     private static final int STARTED = 1 << 2;
@@ -1669,13 +1669,13 @@ public class ForkJoinPool extends AbstractExecutorService {
     // Instance fields
     volatile long ctl;                   // main pool control
     volatile int runState;               // lockable status
-    final int config;                    // parallelism, mode
-    int indexSeed;                       // to generate worker index
-    volatile WorkQueue[] workQueues;     // main registry
-    final ForkJoinWorkerThreadFactory factory;
-    final UncaughtExceptionHandler ueh;  // per-worker UEH
-    final String workerNamePrefix;       // to create worker name string
-    volatile AtomicLong stealCounter;    // also used as sync monitor
+    final int config;                    // parallelism, mode 并行模式
+    int indexSeed;                       // to generate worker index 生成工作线程索引
+    volatile WorkQueue[] workQueues;     // main registry 主对象注册信息，workQueue
+    final ForkJoinWorkerThreadFactory factory;//线程工厂
+    final UncaughtExceptionHandler ueh;  // per-worker UEH 异常信息
+    final String workerNamePrefix;       // to create worker name string 用于创建工作线程的名称
+    volatile AtomicLong stealCounter;    // also used as sync monitor 偷取任务总数
 
     /**
      * Acquires the runState lock; returns current (locked) runState.
