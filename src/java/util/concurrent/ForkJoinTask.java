@@ -252,14 +252,14 @@ public abstract class ForkJoinTask<V> implements Future<V>, Serializable {
      * tags.
      */
 
-    /** The run status of this task */
+    /** The run status of this task 任务运行状态 */
     volatile int status; // accessed directly by pool and workers
-    static final int DONE_MASK   = 0xf0000000;  // mask out non-completion bits
+    static final int DONE_MASK   = 0xf0000000;  // mask out non-completion bits 任务未完成
     static final int NORMAL      = 0xf0000000;  // must be negative
     static final int CANCELLED   = 0xc0000000;  // must be < NORMAL
     static final int EXCEPTIONAL = 0x80000000;  // must be < CANCELLED
     static final int SIGNAL      = 0x00010000;  // must be >= 1 << 16
-    static final int SMASK       = 0x0000ffff;  // short bits for tags
+    static final int SMASK       = 0x0000ffff;  // short bits for tags 低位掩码
 
     /**
      * Marks completion and wakes up threads waiting to join this
@@ -703,7 +703,7 @@ public abstract class ForkJoinTask<V> implements Future<V>, Serializable {
      */
     /*
      * 在当前任务所在的池中，安排异步执行该任务。
-     * 将一个任务fork多次是一个用法错误，除非它已经完成并且被重新初始化。
+     * 在任务已经完成并且被重新初始化之前，不能能把任务fork多次。
      * 随后对该任务状态的修改或它所操作的任何数据，对其他线程来说不一定是始终保持一致的，除非调用了join或其相关方法。
      */
     public final ForkJoinTask<V> fork() {
@@ -727,7 +727,7 @@ public abstract class ForkJoinTask<V> implements Future<V>, Serializable {
      * @return the computed result
      */
     /*
-     * 完成后返回计算结果
+     * 任务完成后返回计算结果
      */
     public final V join() {
         int s;
@@ -744,7 +744,7 @@ public abstract class ForkJoinTask<V> implements Future<V>, Serializable {
      *
      * @return the computed result
      */
-    //执行任务
+    //执行任务，并等待任务完成并返回结果
     public final V invoke() {
         int s;
         if ((s = doInvoke() & DONE_MASK) != NORMAL)
