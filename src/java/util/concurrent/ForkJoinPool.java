@@ -1822,10 +1822,11 @@ public class ForkJoinPool extends AbstractExecutorService {
     //ForkJoinWorkerThread构造器的回调函数，用于创建和记录WorkQueue
     final WorkQueue registerWorker(ForkJoinWorkerThread wt) {
         UncaughtExceptionHandler handler;
+        //设置为守护线程
         wt.setDaemon(true);                           // configure thread
         if ((handler = ueh) != null)
             wt.setUncaughtExceptionHandler(handler);
-        WorkQueue w = new WorkQueue(this, wt);
+        WorkQueue w = new WorkQueue(this, wt);//构造新的WorkQueue
         int i = 0;                                    // assign a pool index
         int mode = config & MODE_MASK;
         int rs = lockRunState();
@@ -1833,13 +1834,15 @@ public class ForkJoinPool extends AbstractExecutorService {
             WorkQueue[] ws;
             int n;                    // skip if no array
             if ((ws = workQueues) != null && (n = ws.length) > 0) {
+                //生成新建WorkQueue的索引
                 int s = indexSeed += SEED_INCREMENT;  // unlikely to collide
                 int m = n - 1;
-                i = ((s << 1) | 1) & m;               // Worker任务，放在奇数索引位 odd-numbered indices
+                i = ((s << 1) | 1) & m;               // Worker任务放在奇数索引位 odd-numbered indices
                 if (ws[i] != null) {                  // collision 已存在，重新计算索引位
                     int probes = 0;                   // step by approx half n
                     int step = (n <= 4) ? 2 : ((n >>> 1) & EVENMASK) + 2;
-                    while (ws[i = (i + step) & m] != null) {//向后查找可用的索引位
+                    //查找可用的索引位
+                    while (ws[i = (i + step) & m] != null) {
                         if (++probes >= n) {//所有索引位都被占用，对workQueues进行扩容
                             workQueues = ws = Arrays.copyOf(ws, n <<= 1);//workQueues 扩容
                             m = n - 1;
@@ -2031,8 +2034,6 @@ public class ForkJoinPool extends AbstractExecutorService {
     /**
      * 扫描并尝试偷取一个最顶层任务。从一个随机位置开始扫描，
      *
-     * 由于使用的是w.hit，如果在扫描前 workQueues 被扩容，那么此时扫描的可能不是当前工作线程的任务队列。
-     * 也就是说，如果在分割任务时导致workQueues扩容，则随机选择一个WorkQueue来帮助它执行任务。
      */
     private ForkJoinTask<?> scan(WorkQueue w, int r) {
         WorkQueue[] ws;
@@ -2097,7 +2098,7 @@ public class ForkJoinPool extends AbstractExecutorService {
                         else
                             w.scanState = ss;         // back out
                     }
-                    checkSum = 0;//池处于不稳定状态，重置checkSum，继续循环
+                    checkSum = 0;//重置checkSum，继续循环
                 }
             }
         }
@@ -2117,7 +2118,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      * @param r a random seed (for spins)
      * @return false if the worker should terminate
      */
-    /**可能阻塞给定任务队列等待另一个任务的偷取，如果工作线程需要终止返回false
+    /**可能阻塞给定任务队列等待偷取一个任务，如果工作线程需要终止返回false
      * 如果由于失活的工作线程导致池变成静止状态，就检查是否可以终止线程池。
      * 只要它不是唯一的工作线程，就等待一个跟定的时间，等待期满后，如果ctl尚未
      * 改变就终止这个工作线程，并依次唤醒其他工作线程重复这个操作
