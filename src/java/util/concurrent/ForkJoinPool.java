@@ -2144,9 +2144,9 @@ public class ForkJoinPool extends AbstractExecutorService {
                             (v.parker == null || v.scanState >= 0))
                         spins = SPINS;                // continue spinning
                 }
-            } else if (w.qlock < 0)                     // recheck after spins
+            } else if (w.qlock < 0)                     // 当前workQueue已经终止，返回false recheck after spins
                 return false;
-            else if (!Thread.interrupted()) {//清除中断状态
+            else if (!Thread.interrupted()) {//判断线程是否被中断，并清除中断状态
                 long c, prevctl, parkTime, deadline;
                 int ac = (int) ((c = ctl) >> AC_SHIFT) + (config & SMASK);//活跃线程数
                 if ((ac <= 0 && tryTerminate(false, false)) || //无active线程，尝试终止
@@ -2157,22 +2157,24 @@ public class ForkJoinPool extends AbstractExecutorService {
                     int t = (short) (c >>> TC_SHIFT);  // shrink excess spares
                     if (t > 2 && U.compareAndSwapLong(this, CTL, c, prevctl))//线程过量，缩减多余线程数
                         return false;                 // else use timed wait
+                    //计算空闲超时时间
                     parkTime = IDLE_TIMEOUT * ((t >= 0) ? 1 : 1 - t);
                     deadline = System.nanoTime() + parkTime - TIMEOUT_SLOP;
                 } else
                     prevctl = parkTime = deadline = 0L;
                 Thread wt = Thread.currentThread();
                 U.putObject(wt, PARKBLOCKER, this);   // emulate LockSupport
-                w.parker = wt;
+                w.parker = wt;//设置parker，准备阻塞
                 if (w.scanState < 0 && ctl == c)      // recheck before park
-                    U.park(false, parkTime);//阻塞当前线程
+                    U.park(false, parkTime);//阻塞指定的时间
+
                 U.putOrderedObject(w, QPARKER, null);
                 U.putObject(wt, PARKBLOCKER, null);
-                if (w.scanState >= 0)
+                if (w.scanState >= 0)//正在扫描，说明等到任务，跳出循环
                     break;
                 if (parkTime != 0L && ctl == c &&
                         deadline - System.nanoTime() <= 0L &&
-                        U.compareAndSwapLong(this, CTL, c, prevctl))
+                        U.compareAndSwapLong(this, CTL, c, prevctl))//未等到任务，更新ctl，返回false
                     return false;                     // shrink pool
             }
         }
