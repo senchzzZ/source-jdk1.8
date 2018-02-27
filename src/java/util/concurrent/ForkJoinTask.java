@@ -292,7 +292,7 @@ public abstract class ForkJoinTask<V> implements Future<V>, Serializable {
         int s; boolean completed;
         if ((s = status) >= 0) {
             try {
-                completed = exec();
+                completed = exec();//执行我们定义的任务
             } catch (Throwable rex) {
                 return setExceptionalCompletion(rex);
             }
@@ -326,16 +326,17 @@ public abstract class ForkJoinTask<V> implements Future<V>, Serializable {
      * @return status upon completion
      */
     private int externalAwaitDone() {
+        //执行任务
         int s = ((this instanceof CountedCompleter) ? // try helping
-                 ForkJoinPool.common.externalHelpComplete(
+                 ForkJoinPool.common.externalHelpComplete(//CountedCompleter任务
                      (CountedCompleter<?>)this, 0) :
-                 ForkJoinPool.common.tryExternalUnpush(this) ? doExec() : 0);
-        if (s >= 0 && (s = status) >= 0) {
+                 ForkJoinPool.common.tryExternalUnpush(this) ? doExec() : 0);//ForkJoinTask任务
+        if (s >= 0 && (s = status) >= 0) {//执行失败，进入等待
             boolean interrupted = false;
             do {
-                if (U.compareAndSwapInt(this, STATUS, s, s | SIGNAL)) {
+                if (U.compareAndSwapInt(this, STATUS, s, s | SIGNAL)) {//更新state
                     synchronized (this) {
-                        if (status >= 0) {
+                        if (status >= 0) {//SIGNAL 等待信号
                             try {
                                 wait(0L);
                             } catch (InterruptedException ie) {

@@ -46,6 +46,9 @@ package java.util.concurrent;
  * except that multiple <em>pending</em> completions may be necessary
  * to trigger the completion action {@link #onCompletion(CountedCompleter)},
  * not just one.
+ * 继承自ForkJoinTask，当任务的计算已经完成并且没有剩余的等待操作时触发一个完成的动作。
+ * 总的来说，在有子任务停止和阻塞的情况下，要比其他形式的ForkJoinTask更可靠，但是编码更加复杂。
+ *
  * Unless initialized otherwise, the {@linkplain #getPendingCount pending
  * count} starts at zero, but may be (atomically) changed using
  * methods {@link #setPendingCount}, {@link #addToPendingCount}, and

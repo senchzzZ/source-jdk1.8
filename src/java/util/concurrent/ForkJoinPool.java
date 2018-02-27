@@ -1286,18 +1286,18 @@ public class ForkJoinPool extends AbstractExecutorService {
             ForkJoinTask<?>[] a = array;
             if (b - (s = top - 1) <= 0 && a != null &&
                     (m = a.length - 1) >= 0) {
-                if ((config & FIFO_QUEUE) == 0) {
+                if ((config & FIFO_QUEUE) == 0) {//FIFO执行
                     for (ForkJoinTask<?> t; ; ) {
                         if ((t = (ForkJoinTask<?>) U.getAndSetObject
-                                (a, ((m & s) << ASHIFT) + ABASE, null)) == null)
+                                (a, ((m & s) << ASHIFT) + ABASE, null)) == null)//取top任务
                             break;
                         U.putOrderedInt(this, QTOP, s);
-                        t.doExec();
+                        t.doExec();//执行
                         if (base - (s = top - 1) > 0)
                             break;
                     }
                 } else
-                    pollAndExecAll();
+                    pollAndExecAll();//LIFO模式执行，取base任务
             }
         }
 
@@ -1308,15 +1308,15 @@ public class ForkJoinPool extends AbstractExecutorService {
         final void runTask(ForkJoinTask<?> task) {
             if (task != null) {
                 scanState &= ~SCANNING; // mark as busy
-                (currentSteal = task).doExec();
+                (currentSteal = task).doExec();//更新currentSteal并执行任务
                 U.putOrderedObject(this, QCURRENTSTEAL, null); // release for GC
-                execLocalTasks();//执行本地任务
+                execLocalTasks();//依次执行本地任务
                 ForkJoinWorkerThread thread = owner;
                 if (++nsteals < 0)      // collect on overflow
-                    transferStealCount(pool);//增加stealCounter
+                    transferStealCount(pool);//增加偷取任务数
                 scanState |= SCANNING;
                 if (thread != null)
-                    thread.afterTopLevelExec();//擦除ThreadLocals
+                    thread.afterTopLevelExec();//执行钩子函数
             }
         }
 
@@ -1647,14 +1647,14 @@ public class ForkJoinPool extends AbstractExecutorService {
      * and masking, requiring CAS.
      */
 
-    // Lower and upper word masks 高位和低位掩码
+    // Lower and upper word masks 低位和高位掩码
     private static final long SP_MASK = 0xffffffffL;
     private static final long UC_MASK = ~SP_MASK;
 
     // Active counts 活跃线程数
     private static final int AC_SHIFT = 48;
-    private static final long AC_UNIT = 0x0001L << AC_SHIFT;
-    private static final long AC_MASK = 0xffffL << AC_SHIFT;
+    private static final long AC_UNIT = 0x0001L << AC_SHIFT;//增量
+    private static final long AC_MASK = 0xffffL << AC_SHIFT;//掩码
 
     // Total counts 工作线程总数
     private static final int TC_SHIFT = 32;
@@ -1956,7 +1956,7 @@ public class ForkJoinPool extends AbstractExecutorService {
             //计算ctl，加上版本戳SS_SEQ避免ABA问题
             int vs = (sp + SS_SEQ) & ~INACTIVE;        // next scanState
             int d = sp - v.scanState;                  // screen CAS
-            long nc = (UC_MASK & (c + AC_UNIT)) | (SP_MASK & v.stackPred);
+            long nc = (UC_MASK & (c + AC_UNIT)) | (SP_MASK & v.stackPred);//计算活跃线程数并更新为下一个栈顶的scanState
             if (d == 0 && U.compareAndSwapLong(this, CTL, c, nc)) {
                 v.scanState = vs;                      // activate v
                 if ((p = v.parker) != null)
@@ -1982,12 +1982,14 @@ public class ForkJoinPool extends AbstractExecutorService {
     private boolean tryRelease(long c, WorkQueue v, long inc) {
         int sp = (int) c, vs = (sp + SS_SEQ) & ~INACTIVE;
         Thread p;
+        //ctl低32位等于scanState，说明可以唤醒parker线程
         if (v != null && v.scanState == sp) {          // v is at top of stack
+            //计算活跃线程数（高32位）并更新为下一个栈顶的scanState（低32位）
             long nc = (UC_MASK & (c + inc)) | (SP_MASK & v.stackPred);
             if (U.compareAndSwapLong(this, CTL, c, nc)) {
                 v.scanState = vs;
                 if ((p = v.parker) != null)
-                    U.unpark(p);
+                    U.unpark(p);//唤醒线程
                 return true;
             }
         }
@@ -2090,7 +2092,7 @@ public class ForkJoinPool extends AbstractExecutorService {
                         //对当前WorkQueue进行灭活操作
                         int ns = ss | INACTIVE;       // try to inactivate
                         long nc = ((SP_MASK & ns) |
-                                (UC_MASK & ((c = ctl) - AC_UNIT)));
+                                (UC_MASK & ((c = ctl) - AC_UNIT)));//更新为INACTIVE状态并减少活跃线程数
                         w.stackPred = (int) c;         // hold prev stack top
                         U.putInt(w, QSCANSTATE, ns);//修改scanState为inactive状态
                         if (U.compareAndSwapLong(this, CTL, c, nc))//更新scanState为灭活状态
@@ -2153,9 +2155,10 @@ public class ForkJoinPool extends AbstractExecutorService {
                         (runState & STOP) != 0)           // pool terminating
                     return false;
                 if (ac <= 0 && ss == (int) c) {        // is last waiter
-                    prevctl = (UC_MASK & (c + AC_UNIT)) | (SP_MASK & pred);//获取前一个ctl
+                    //计算活跃线程数（高32位）并更新为下一个栈顶的scanState（低32位）
+                    prevctl = (UC_MASK & (c + AC_UNIT)) | (SP_MASK & pred);
                     int t = (short) (c >>> TC_SHIFT);  // shrink excess spares
-                    if (t > 2 && U.compareAndSwapLong(this, CTL, c, prevctl))//线程过量，缩减多余线程数
+                    if (t > 2 && U.compareAndSwapLong(this, CTL, c, prevctl))//总线程过量
                         return false;                 // else use timed wait
                     //计算空闲超时时间
                     parkTime = IDLE_TIMEOUT * ((t >= 0) ? 1 : 1 - t);
@@ -2400,15 +2403,16 @@ public class ForkJoinPool extends AbstractExecutorService {
     final int awaitJoin(WorkQueue w, ForkJoinTask<?> task, long deadline) {
         int s = 0;
         if (task != null && w != null) {
-            ForkJoinTask<?> prevJoin = w.currentJoin;//获取当前join的任务
-            U.putOrderedObject(w, QCURRENTJOIN, task);//替换join任务
+            ForkJoinTask<?> prevJoin = w.currentJoin;//获取当前Worker的join任务
+            U.putOrderedObject(w, QCURRENTJOIN, task);//把currentJoin替换为给定任务
+            //判断是否为CountedCompleter类型的任务
             CountedCompleter<?> cc = (task instanceof CountedCompleter) ?
                     (CountedCompleter<?>) task : null;
             for (; ; ) {
-                if ((s = task.status) < 0)//已经完成|取消|异常 退出循环
+                if ((s = task.status) < 0)//已经完成|取消|异常 跳出循环
                     break;
 
-                if (cc != null)
+                if (cc != null)//CountedCompleter任务由helpComplete来完成join
                     helpComplete(w, cc, 0);
                 else if (w.base == w.top || w.tryRemoveAndExec(task))//尝试执行
                     helpStealer(w, task);//队列为空或执行失败，任务可能被偷，帮助偷取者执行该任务
@@ -2842,7 +2846,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      * locks if apparently non-empty, validates upon locking, and
      * adjusts top. Each check can fail but rarely does.
      */
-    //为外部提交者提供tryUnpush功能
+    //为外部提交者提供 tryUnpush 功能（给定任务在top位时弹出任务）
     final boolean tryExternalUnpush(ForkJoinTask<?> task) {
         WorkQueue[] ws;
         WorkQueue w;
