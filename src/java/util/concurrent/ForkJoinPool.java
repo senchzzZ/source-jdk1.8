@@ -989,7 +989,7 @@ public class ForkJoinPool extends AbstractExecutorService {
     static final int SQMASK = 0x007e;        // max 64 (even) slots 最多64个槽位
 
     // Masks and units for WorkQueue.scanState and ctl sp subfield ctl子域和WorkQueue.scanState的掩码和标志位
-    static final int SCANNING = 1;             // false when running tasks 当任务在运行时为false
+    static final int SCANNING = 1;             // false when running tasks 标记是否正在运行任务
     static final int INACTIVE = 1 << 31;       // must be negative 负数
     static final int SS_SEQ = 1 << 16;       // version count 版本戳，防止ABA问题
 
@@ -1345,33 +1345,34 @@ public class ForkJoinPool extends AbstractExecutorService {
             int m, s, b, n;
             if ((a = array) != null && (m = a.length - 1) >= 0 &&
                     task != null) {
-                while ((n = (s = top) - (b = base)) > 0) {//从top到base遍历查找
+                while ((n = (s = top) - (b = base)) > 0) {
+                    //从top往下自旋查找
                     for (ForkJoinTask<?> t; ; ) {      // traverse from s to b
-                        long j = ((--s & m) << ASHIFT) + ABASE;
-                        if ((t = (ForkJoinTask<?>) U.getObject(a, j)) == null)
+                        long j = ((--s & m) << ASHIFT) + ABASE;//计算任务索引
+                        if ((t = (ForkJoinTask<?>) U.getObject(a, j)) == null) //获取索引到的任务
                             return s + 1 == top;     // shorter than expected
-                        else if (t == task) {
+                        else if (t == task) { //给定任务为索引任务
                             boolean removed = false;
                             if (s + 1 == top) {      // pop
-                                if (U.compareAndSwapObject(a, j, task, null)) {
-                                    U.putOrderedInt(this, QTOP, s);
+                                if (U.compareAndSwapObject(a, j, task, null)) { //弹出任务
+                                    U.putOrderedInt(this, QTOP, s); //更新top
                                     removed = true;
                                 }
                             } else if (base == b)      // replace with proxy
                                 removed = U.compareAndSwapObject(
-                                        a, j, task, new EmptyTask());
+                                        a, j, task, new EmptyTask()); //join任务已经被移除，替换为一个占位任务
                             if (removed)
-                                task.doExec();
+                                task.doExec(); //执行
                             break;
-                        } else if (t.status < 0 && s + 1 == top) {
-                            if (U.compareAndSwapObject(a, j, t, null))
-                                U.putOrderedInt(this, QTOP, s);
+                        } else if (t.status < 0 && s + 1 == top) { //索引任务执行完毕
+                            if (U.compareAndSwapObject(a, j, t, null)) //弹出任务
+                                U.putOrderedInt(this, QTOP, s);//更新top
                             break;                  // was cancelled
                         }
-                        if (--n == 0)
+                        if (--n == 0) //遍历结束
                             return false;
                     }
-                    if (task.status < 0)
+                    if (task.status < 0) //任务执行完毕
                         return false;
                 }
             }
@@ -2266,7 +2267,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      * @param w    caller
      * @param task the task to join
      */
-    //帮助 给定任务的偷取者 定位并执行任务（偷取者偷我的任务，我去偷偷取者的任务）
+    //帮助 给定任务的偷取者 定位并执行任务（偷取者帮我执行任务，我去帮偷取者执行它的任务）
     private void helpStealer(WorkQueue w, ForkJoinTask<?> task) {
         WorkQueue[] ws = workQueues;
         int oldSum = 0, checkSum, m;
@@ -2278,19 +2279,19 @@ public class ForkJoinPool extends AbstractExecutorService {
                 WorkQueue j = w, v;                    // v is subtask stealer
                 descent:
                 for (subtask = task; subtask.status >= 0; ) {
-                    //找到给定task的偷取者v，修改hint
-                    for (int h = j.hint | 1, k = 0, i; ; k += 2) {
+                    //1. 找到给定WorkQueue的偷取者v
+                    for (int h = j.hint | 1, k = 0, i; ; k += 2) {//跳两个索引，因为Worker在奇数索引位
                         if (k > m)                     // can't find stealer
                             break descent;
-                        if ((v = ws[i = (h + k) & m]) != null) {//定位偷取者
-                            if (v.currentSteal == subtask) {
+                        if ((v = ws[i = (h + k) & m]) != null) {
+                            if (v.currentSteal == subtask) {//定位到偷取者
                                 j.hint = i;//更新stealer索引
                                 break;
                             }
                             checkSum += v.base;
                         }
                     }
-                    //帮助偷取者v执行任务
+                    //2. 帮助偷取者v执行任务
                     for (; ; ) {                         // help v or descend
                         ForkJoinTask<?>[] a;            //偷取者内部的任务
                         int b;
@@ -2298,7 +2299,7 @@ public class ForkJoinPool extends AbstractExecutorService {
                         ForkJoinTask<?> next = v.currentJoin;//获取偷取者的join任务
                         if (subtask.status < 0 || j.currentJoin != subtask ||
                                 v.currentSteal != subtask) // stale
-                            break descent;
+                            break descent; // stale，跳出descent循环重来
                         if (b - v.top >= 0 || (a = v.array) == null) {
                             if ((subtask = next) == null)   //偷取者的join任务为null，跳出descent循环
                                 break descent;
@@ -2310,21 +2311,22 @@ public class ForkJoinPool extends AbstractExecutorService {
                                 U.getObjectVolatile(a, i));//获取偷取者的base任务
                         if (v.base == b) {
                             if (t == null)             // stale
-                                break descent;
-                            if (U.compareAndSwapObject(a, i, t, null)) {
-                                v.base = b + 1;         //更新base
-                                ForkJoinTask<?> ps = w.currentSteal;//获取给定workQueue的偷来的任务
+                                break descent; // stale，跳出descent循环重来
+                            if (U.compareAndSwapObject(a, i, t, null)) {//弹出任务
+                                v.base = b + 1;         //更新偷取者的base位
+                                ForkJoinTask<?> ps = w.currentSteal;//获取调用者偷来的任务
                                 int top = w.top;
                                 //首先更新给定workQueue的currentSteal为偷取者的base任务，然后执行该任务
-                                //然后依次弹出给定workQueue的任务(LIFO)->更新currentSteal->执行该任务（注意这里是自己偷自己的任务执行）
+                                //然后通过检查top来判断给定workQueue是否有自己的任务，如果有，
+                                // 则依次弹出任务(LIFO)->更新currentSteal->执行该任务（注意这里是自己偷自己的任务执行）
                                 do {
                                     U.putOrderedObject(w, QCURRENTSTEAL, t);
                                     t.doExec();        // clear local tasks too
                                 } while (task.status >= 0 &&
-                                        w.top != top &&
+                                        w.top != top && //内部有自己的任务，依次弹出执行
                                         (t = w.pop()) != null);
                                 U.putOrderedObject(w, QCURRENTSTEAL, ps);//还原给定workQueue的currentSteal
-                                if (w.base != w.top)
+                                if (w.base != w.top)//给定workQueue有自己的任务了，帮助结束，返回
                                     return;            // can't further help
                             }
                         }
@@ -2351,24 +2353,24 @@ public class ForkJoinPool extends AbstractExecutorService {
         if (w == null || w.qlock < 0 ||           // caller terminating
                 (ws = workQueues) == null || (m = ws.length - 1) <= 0 ||
                 (pc = config & SMASK) == 0)           // parallelism disabled
-            canBlock = false;
+            canBlock = false; //调用者已终止
         else if ((sp = (int) (c = ctl)) != 0)      // release idle worker
-            canBlock = tryRelease(c, ws[sp & m], 0L);//唤醒空闲工作线程
+            canBlock = tryRelease(c, ws[sp & m], 0L);//唤醒等待的工作线程
         else {//没有空闲线程
             int ac = (int) (c >> AC_SHIFT) + pc; //活跃线程数
             int tc = (short) (c >> TC_SHIFT) + pc;//总线程数
             int nbusy = 0;                        // validate saturation
-            for (int i = 0; i <= m; ++i) {        //奇数索引，存放worker任务 two passes of odd indices
+            for (int i = 0; i <= m; ++i) {        // two passes of odd indices
                 WorkQueue v;
-                if ((v = ws[((i << 1) | 1) & m]) != null) {
-                    if ((v.scanState & SCANNING) != 0)//正在扫描，跳出循环
+                if ((v = ws[((i << 1) | 1) & m]) != null) {//取奇数索引位
+                    if ((v.scanState & SCANNING) != 0)//没有正在运行任务，跳出
                         break;
-                    ++nbusy;
+                    ++nbusy;//正在运行任务，添加标记
                 }
             }
             if (nbusy != (tc << 1) || ctl != c)
                 canBlock = false;                 // unstable or stale
-            else if (tc >= pc && ac > 1 && w.isEmpty()) {//总线程数大于并行度 & 活动线程数大于1 & 队列为空，不需要补偿
+            else if (tc >= pc && ac > 1 && w.isEmpty()) {//总线程数大于并行度 && 活动线程数大于1 && 调用者任务队列为空，不需要补偿
                 long nc = ((AC_MASK & (c - AC_UNIT)) |
                         (~AC_MASK & c));       // uncompensated
                 canBlock = U.compareAndSwapLong(this, CTL, c, nc);//更新活跃线程数
@@ -2380,11 +2382,11 @@ public class ForkJoinPool extends AbstractExecutorService {
                 boolean add = false;
                 int rs;      // CAS within lock
                 long nc = ((AC_MASK & c) |
-                        (TC_MASK & (c + TC_UNIT)));
-                if (((rs = lockRunState()) & STOP) == 0)//池尚未停止，更新ctl
-                    add = U.compareAndSwapLong(this, CTL, c, nc);
+                        (TC_MASK & (c + TC_UNIT)));//计算总线程数
+                if (((rs = lockRunState()) & STOP) == 0)
+                    add = U.compareAndSwapLong(this, CTL, c, nc);//更新总线程数
                 unlockRunState(rs, rs & ~RSLOCK);
-                //运行到这里说明活跃工作线程数不足，需要创建一个新的工作线程
+                //运行到这里说明活跃工作线程数不足，需要创建一个新的工作线程来补偿
                 canBlock = add && createWorker(); // throws on exception
             }
         }
@@ -2403,23 +2405,24 @@ public class ForkJoinPool extends AbstractExecutorService {
     final int awaitJoin(WorkQueue w, ForkJoinTask<?> task, long deadline) {
         int s = 0;
         if (task != null && w != null) {
-            ForkJoinTask<?> prevJoin = w.currentJoin;//获取当前Worker的join任务
-            U.putOrderedObject(w, QCURRENTJOIN, task);//把currentJoin替换为给定任务
+            ForkJoinTask<?> prevJoin = w.currentJoin;  //获取给定Worker的join任务
+            U.putOrderedObject(w, QCURRENTJOIN, task);  //把currentJoin替换为给定任务
             //判断是否为CountedCompleter类型的任务
             CountedCompleter<?> cc = (task instanceof CountedCompleter) ?
                     (CountedCompleter<?>) task : null;
             for (; ; ) {
-                if ((s = task.status) < 0)//已经完成|取消|异常 跳出循环
+                if ((s = task.status) < 0)  //已经完成|取消|异常 跳出循环
                     break;
 
-                if (cc != null)//CountedCompleter任务由helpComplete来完成join
+                if (cc != null)  //CountedCompleter任务由helpComplete来完成join
                     helpComplete(w, cc, 0);
-                else if (w.base == w.top || w.tryRemoveAndExec(task))//尝试执行
-                    helpStealer(w, task);//队列为空或执行失败，任务可能被偷，帮助偷取者执行该任务
+                else if (w.base == w.top || w.tryRemoveAndExec(task))  //尝试执行
+                    helpStealer(w, task);  //队列为空或执行失败，任务可能被偷，帮助偷取者执行该任务
 
-                if ((s = task.status) < 0)
+                if ((s = task.status) < 0) //已经完成|取消|异常，跳出循环
                     break;
 
+                //计算任务等待时间
                 long ms, ns;
                 if (deadline == 0L)
                     ms = 0L;
@@ -2430,7 +2433,7 @@ public class ForkJoinPool extends AbstractExecutorService {
 
                 if (tryCompensate(w)) {//执行补偿操作
                     task.internalWait(ms);//补偿执行成功，任务等待指定时间
-                    U.getAndAddLong(this, CTL, AC_UNIT);//还原活跃线程数
+                    U.getAndAddLong(this, CTL, AC_UNIT);//更新活跃线程数
                 }
             }
             U.putOrderedObject(w, QCURRENTJOIN, prevJoin);//循环结束，替换为原来的join任务
@@ -2856,16 +2859,16 @@ public class ForkJoinPool extends AbstractExecutorService {
         if ((ws = workQueues) != null && (m = ws.length - 1) >= 0 &&
                 (w = ws[m & r & SQMASK]) != null &&
                 (a = w.array) != null && (s = w.top) != w.base) {
-            long j = (((a.length - 1) & (s - 1)) << ASHIFT) + ABASE;
-            if (U.compareAndSwapInt(w, QLOCK, 0, 1)) {
+            long j = (((a.length - 1) & (s - 1)) << ASHIFT) + ABASE;//取top位任务
+            if (U.compareAndSwapInt(w, QLOCK, 0, 1)) {//加锁
                 if (w.top == s && w.array == a &&
                         U.getObject(a, j) == task &&
-                        U.compareAndSwapObject(a, j, task, null)) {
-                    U.putOrderedInt(w, QTOP, s - 1);
-                    U.putOrderedInt(w, QLOCK, 0);
+                        U.compareAndSwapObject(a, j, task, null)) {//符合条件，弹出
+                    U.putOrderedInt(w, QTOP, s - 1);//更新top
+                    U.putOrderedInt(w, QLOCK, 0); //解锁
                     return true;
                 }
-                U.compareAndSwapInt(w, QLOCK, 1, 0);
+                U.compareAndSwapInt(w, QLOCK, 1, 0);//解锁
             }
         }
         return false;
