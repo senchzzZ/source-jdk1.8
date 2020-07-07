@@ -59,7 +59,7 @@ import java.util.function.Consumer;
  * Linked queues typically have higher throughput than array-based queues but
  * less predictable performance in most concurrent applications.
  * 单向链表结构的自定义容量的阻塞队列，元素操作按照 FIFO (first-in-first-out 先入先出) 的顺序
- * 链表结构的队列通常比基于数据的队列有更高的吞吐量，但是在并发环境下性能却不如数据队列。
+ * 链表结构的队列通常比基于数组的队列有更高的吞吐量，但是在并发环境下性能却不如数组队列。
  *
  *
  * <p>The optional capacity bound constructor argument serves as a

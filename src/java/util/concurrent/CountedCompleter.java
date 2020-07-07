@@ -46,7 +46,7 @@ package java.util.concurrent;
  * except that multiple <em>pending</em> completions may be necessary
  * to trigger the completion action {@link #onCompletion(CountedCompleter)},
  * not just one.
- * 继承自ForkJoinTask，当任务的计算已经完成并且没有剩余的等待操作时触发一个完成的动作。
+ * 继承自ForkJoinTask，当工作线程的任务已经完成并且没有剩余的等待操作时触发一个完成的动作。
  * 总的来说，在有子任务停止和阻塞的情况下，要比其他形式的ForkJoinTask更可靠，但是编码更加复杂。
  *
  * Unless initialized otherwise, the {@linkplain #getPendingCount pending
@@ -77,6 +77,9 @@ package java.util.concurrent;
  * to perform an action upon normal completion, and method
  * {@link #onExceptionalCompletion(Throwable, CountedCompleter)} to
  * perform an action upon any exception.
+ * 继承此类需要实现compute方法，并且在多数情况下，
+ * 在compute返回之前需要调用tryComplete方法来执行任务的completer或标记任务已经完成。
+ * 我们也可以实现onCompletion方法，在任务完成之后触发；同样地，onExceptionalCompletion在遭遇异常时被触发。
  *
  * <p>CountedCompleters most often do not bear results, in which case
  * they are normally declared as {@code CountedCompleter<Void>}, and
@@ -89,6 +92,9 @@ package java.util.concurrent;
  * default plays no role in CountedCompleters.  It is possible, but
  * rarely applicable, to override this method to maintain other
  * objects or fields holding result data.
+ * 多数情况下，CountedCompleter不会定义返回结果（定义为CountedCompleter<Void>），
+ * 而是通过重写getRawResult方法，然后通过join(), invoke()来获取结果，使用这种扩展性，
+ * 我们可以更灵活的定义返回信息。
  *
  * <p>A CountedCompleter that does not itself have a completer (i.e.,
  * one for which {@link #getCompleter} returns {@code null}) can be
@@ -105,6 +111,12 @@ package java.util.concurrent;
  * not otherwise already completed. Similarly, cancelling an internal
  * CountedCompleter has only a local effect on that completer, so is
  * not often useful.
+ * 一个没有定义completer的CountedCompleter相当于普通的ForkJoinTask任务，但是可以使用CountedCompleter附加的功能。
+ * 一个定义了completer的CountedCompleter在获取任务状态status（ForkJoinTask.isDone）时，它可能是其中任意一个任务的状态，
+ * 这个状态只有在调用complete、ForkJoinTask.cancel、ForkJoinTask.completeExceptionally(Throwable)或者运行时遭遇异常才会更新。
+ * 如果在任务执行期间遭遇异常，这个异常会被传递到当前任务的子任务（或子任务的子任务，依次传递）。
+ * 同样地，取消一个内部CountedCompleter任务只对它的completer有影响，所以一般不会这么使用。
+ *
  *
  * <p><b>Sample Usages.</b>
  *

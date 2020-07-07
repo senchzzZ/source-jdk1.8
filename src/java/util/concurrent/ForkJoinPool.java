@@ -1291,7 +1291,7 @@ public class ForkJoinPool extends AbstractExecutorService {
                         if ((t = (ForkJoinTask<?>) U.getAndSetObject
                                 (a, ((m & s) << ASHIFT) + ABASE, null)) == null)//取top任务
                             break;
-                        U.putOrderedInt(this, QTOP, s);
+                        U.putOrderedInt(this, QTOP, s);//更新push索引
                         t.doExec();//执行
                         if (base - (s = top - 1) > 0)
                             break;
@@ -1383,7 +1383,7 @@ public class ForkJoinPool extends AbstractExecutorService {
          * Pops task if in the same CC computation as the given task,
          * in either shared or owned mode. Used only by helpComplete.
          */
-        //获取 和指定任务相同CountedCompleter 的任务，只在helpComplete中调用
+        //获取 和给定CountedCompleter有相同父节点的任务，只在helpComplete中调用
         final CountedCompleter<?> popCC(CountedCompleter<?> task, int mode) {
             int s;
             ForkJoinTask<?>[] a;
@@ -1428,6 +1428,7 @@ public class ForkJoinPool extends AbstractExecutorService {
          * stealer), -1 if non-empty but no matching task found, else
          * the base index, forced negative.
          */
+        //偷取并执行和给定CountedCompleter有相同父节点的任务
         final int pollAndExecCC(CountedCompleter<?> task) {
             int b, h;
             ForkJoinTask<?>[] a;
@@ -1435,7 +1436,7 @@ public class ForkJoinPool extends AbstractExecutorService {
             if ((b = base) - top >= 0 || (a = array) == null)
                 h = b | Integer.MIN_VALUE;  // to sense movement on re-poll
             else {
-                long j = (((a.length - 1) & b) << ASHIFT) + ABASE;
+                long j = (((a.length - 1) & b) << ASHIFT) + ABASE;//获取base索引
                 if ((o = U.getObjectVolatile(a, j)) == null)
                     h = 2;                  // retryable
                 else if (!(o instanceof CountedCompleter))
@@ -1445,9 +1446,9 @@ public class ForkJoinPool extends AbstractExecutorService {
                     for (CountedCompleter<?> r = t; ; ) {
                         if (r == task) {
                             if (base == b &&
-                                    U.compareAndSwapObject(a, j, t, null)) {
+                                    U.compareAndSwapObject(a, j, t, null)) {//弹出任务
                                 base = b + 1;
-                                t.doExec();
+                                t.doExec();//执行
                                 h = 1;      // success
                             } else
                                 h = 2;      // lost CAS
@@ -2204,10 +2205,10 @@ public class ForkJoinPool extends AbstractExecutorService {
      * @return task status on exit
      */
     /*
-     * 尝试在目标的计算中窃取并运行任务。使用更高级的算法，限制需要帮助的任务必须是给定任务的子任务：
+     * 尝试在目标任务的计算中窃取并运行任务。使用更高级的算法，限制需要帮助的任务必须是给定任务的子任务：
      * 从工作线程自己的队列中取出和运行符合条件的任务(通过方法popCC)。否则的话去扫描其他队列，随机移动
      * 到竞争点或执行点，使用checksum(pollAndExecCC返回数之和)决定何时放弃扫描。参数maxTasks支持外部
-     * 提交的任务调用，内部调用传0(外部调用传非正数)
+     * 提交的任务调用，内部调用传0，外部调用传非正数
      */
     final int helpComplete(WorkQueue w, CountedCompleter<?> task,
                            int maxTasks) {
@@ -2224,26 +2225,26 @@ public class ForkJoinPool extends AbstractExecutorService {
                 WorkQueue q;
                 if ((s = task.status) < 0)//给定任务已完成，跳出循环
                     break;
-                if (h == 1 && (p = w.popCC(task, mode)) != null) {//获取和指定任务相同CountedCompleter的任务
+                if (h == 1 && (p = w.popCC(task, mode)) != null) {//获取 和给定CountedCompleter有相同父节点的任务
                     p.doExec();                  // run local task
                     if (maxTasks != 0 && --maxTasks == 0)
                         break;                  //执行次数已满，跳出循环
                     origin = k;                  // reset
                     oldSum = checkSum = 0;
-                } else {                           //获取其他队列任务 poll other queues
+                } else {                           //帮助执行其他队列任务 poll other queues
                     if ((q = ws[k]) == null)
                         h = 0;
-                    else if ((h = q.pollAndExecCC(task)) < 0)
+                    else if ((h = q.pollAndExecCC(task)) < 0)//偷取任务执行
                         checkSum += h;//未找到匹配任务
                     if (h > 0) {
-                        if (h == 1 && maxTasks != 0 && --maxTasks == 0)
+                        if (h == 1 && maxTasks != 0 && --maxTasks == 0)//执行成功，跳出循环
                             break;
                         r ^= r << 13;
                         r ^= r >>> 17;
                         r ^= r << 5; // xorshift
                         origin = k = r & m;      // move and restart
                         oldSum = checkSum = 0;
-                    } else if ((k = (k + 1) & m) == origin) {
+                    } else if ((k = (k + 1) & m) == origin) {//继续向后遍历
                         if (oldSum == (oldSum = checkSum))
                             break;
                         checkSum = 0;

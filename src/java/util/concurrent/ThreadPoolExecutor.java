@@ -611,7 +611,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
      * present or if allowCoreThreadTimeOut. Otherwise they wait
      * forever for new work.
      */
-    /**空闲线程保活时长*/
+    /**空闲线程保活时长,只有在当前线程数大于核心线程数或者allowCoreThreadTimeOut为true时生效*/
     private volatile long keepAliveTime;
 
     /**

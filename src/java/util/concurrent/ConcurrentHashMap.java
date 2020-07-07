@@ -711,7 +711,6 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
      */
     /*
      * 取hash高16位计算异或(XOR)，高位补0.
-     * 只有在当前掩码上的部分的散列的集合总是会发生碰撞。
      */
     static final int spread(int h) {
         return (h ^ (h >>> 16)) & HASH_BITS;
